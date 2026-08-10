@@ -1,16 +1,12 @@
 import gurobipy as gp
 from gurobipy import GRB
 
-from math import exp
-
 from build_Q import build_Q
 from build_dit import build_dit
 from build_cost import BUILD_COST as bc
 
-from data import amort_factor   # ver_time_horizon: amort_factor
 
-
-def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_horizon: horizon_years
+def build_model(data, gurobi_params=None):
     nodes = data.nodes
     commodities = data.commodities
     arcs = data.arcs
@@ -21,13 +17,7 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
     T = data.T
     A = range(len(arcs))
 
-    # ver_time_horizon: 정상상태 window / amortization 파라미터
     mission = data.mission
-    ss   = mission["steady_start"]   # 정상상태 시작
-    seam = mission["seam"]           # seam(= ss 에 glue)
-    if horizon_years is None:
-        horizon_years = mission["mission_years"]
-    AMORT, periods_H = amort_factor(mission, horizon_years)
 
     out_arcs = {i: [a for a in A if arcs[a].tail == i] for i in nodes}
     in_arcs = {i: [a for a in A if arcs[a].head == i] for i in nodes}
@@ -87,7 +77,6 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
                     dep.append((c, v, a, t))
 
     x = m.addVars(dep, lb=0, vtype=GRB.CONTINUOUS, name="x")
-    xm = m.addVars([(k,v,a,t+arcs[a].tau) for (k,v,a,t) in dep], lb=0, vtype=GRB.CONTINUOUS, name="xm")
 
     spacecraft_index=[]
     #spacecraft variables
@@ -101,7 +90,7 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
                     continue
 
                 spacecraft_index.append((v, a, t))
-    y = m.addVars(spacecraft_index, lb=0, vtype=GRB.CONTINUOUS, name="y")
+    y = m.addVars(spacecraft_index, lb=0, vtype=GRB.INTEGER, name="y")
 
     N_sc = m.addVars(["OTV", "RT"], lb=0, vtype=GRB.INTEGER, name="N_sc")
 
@@ -119,9 +108,7 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
     q = m.addVars(E, lb=0, name="q") #DWE, SWE 사이징
     q_operation = m.addVars(E,range(T), lb=0, name="q_operation")
 
-    # ver_time_horizon: 지구연료를 t=0 일회성 주입(first_prop) 대신 매 스텝 recurring source 로.
-    #   ramp 구간(t<ss) = 1회성, 정상상태 블록(ss<=t<seam) = opex(×AMORT).  탱크(first_Tank)는
-    #   durable 하드웨어라 그대로 유지.
+    # Earth-supplied propellant can enter at any point in the full mission.
     earth_prop = m.addVars(["LEO", "Moon"], range(T), lb=0, name="earth_prop")
     first_Tank = m.addVars(["H2O_Tank", "Prop_Tank"], lb=0, name="first_tank")
 
@@ -130,12 +117,7 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
     # Facility build cost
     # ------------------------------------------------------------
 
-    # ver_time_horizon: 목적함수를 capex(1회) + opex(정상상태 블록 ×AMORT)로 재구성.
-    #   - 유지보수를 obj_swe/obj_dwe 에서 빼내 opex(정상상태 주기당)로 재분류.
-    #   - 지구연료: ramp 구간(t<ss) ×1, 정상상태 블록(ss<=t<seam) ×AMORT, tail(t>=seam) ×1.
-    # 이렇게 하면 짧은 window 최적해가 곧 미션-H(horizon_years) 최적해가 된다.
-
-    # ---- capex: 제작 + 배송만 (유지보수 제거) ----  ver_time_horizon
+    # One-time facility construction and delivery.
     obj_swe = (
         bc["SWE_fixed"] * SWE
         + (bc["SWE_per_capacity"] + bc["transfer_cost"]["Moon"]) * q["Moon_SWE"]
@@ -164,32 +146,26 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
         + (bc["transfer_cost"]["Moon"] + bc["Storage_Prop_per_kg"]) * first_Tank["Prop_Tank"]
     )
 
-    # ---- opex1: ISRU 유지보수 (Gkaravela 5% 플랜트질량/년)
-    # 스텝당 spares 비율 × 정상상태 블록 스텝수 × ×AMORT  = 미션 전체 유지보수.
-    maint_ps = bc["ISRU_maint_frac_per_yr"] * (data.mission["days_per_step"] / 365.0)
-    block_steps = seam - ss
-    obj_maint = AMORT * maint_ps * block_steps * (
+    # Full-mission ISRU maintenance (5% of plant mass per 360-day year).
+    mission_duration_years = (
+        mission["mission_steps"] * mission["days_per_step"] / mission["days_per_year"]
+    )
+    maint_factor = bc["ISRU_maint_frac_per_yr"] * mission_duration_years
+    obj_maint = maint_factor * (
         (bc["ISRU_spares_cost_per_kg"] + bc["transfer_cost"]["Moon"]) * q["Moon_SWE"]
         + gp.quicksum((bc["ISRU_spares_cost_per_kg"] + bc["transfer_cost"][p]) * q[p]
                       for p in E_Depot)
     )
 
-    # ---- opex2: 지구연료 (재료비 + 배송비) ----  ver_time_horizon
-    obj_earth_ramp = gp.quicksum(          # ramp(setup + roll-in): 1회성 초기재고
+    # Every kilogram of Earth-supplied propellant is charged exactly once.
+    obj_earth_prop = gp.quicksum(
         (bc["Ini_Prop_per_kg"] + bc["transfer_cost"][node]) * earth_prop[node, t]
-        for node in ["LEO", "Moon"] for t in range(ss)
+        for node in ["LEO", "Moon"] for t in range(T)
     )
-    obj_earth_steady = AMORT * gp.quicksum(  # 정상상태 블록 [ss, seam): opex
-        (bc["Ini_Prop_per_kg"] + bc["transfer_cost"][node]) *earth_prop[node, t]
-        for node in ["LEO", "Moon"] for t in range(ss, seam)
-    )
-    # ver_time_horizon: tail[seam,T) 지구연료는 주입 자체를 막았으므로(위 mass balance) 목적함수에
-    # 별도 항이 없다.  (해당 earth_prop 변수는 어떤 제약에도 안 쓰여 최적에서 0.)
 
-    # ---- Total objective ----  ver_time_horizon
     obj = (
         obj_swe + obj_dwe + obj_storage + obj_spacecraft
-        + obj_maint + obj_earth_ramp + obj_earth_steady
+        + obj_maint + obj_earth_prop
     )
 
     m.setObjective(obj, GRB.MINIMIZE)
@@ -197,17 +173,32 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
     '''-----------------------Constraints-----------------------'''
    
     #----------------------------xm value----------------------------
+
+    arrival_expr ={}
     for (k, v, a, t) in x:
         t_arr = t + arcs[a].tau
-        if (k, v, a, t_arr) in xm:
-            outside = gp.quicksum(
-                Q[v][a][k][c] * x[c, v, a, t]
-                for c in commodities
-                if (c, v, a, t) in x
+
+        expr = gp.LinExpr()
+
+        for c in commodities:
+            if (c,v,a,t) in x:
+                coeff = Q[v][a][k][c]
+
+                if coeff != 0.0:
+                    expr.addTerms(coeff, x[c,v,a,t])
+
+        if (v,a,t) in y:
+            coeff = Q[v][a][k][v]
+            if coeff != 0.0:
+                expr.addTerms(coeff, y[v,a,t])
+
+        arrival_expr[k,v,a,t_arr] = expr
+        if k == "Prop" and arcs[a].kind == "move":
+            m.addConstr(
+                expr >= 0.0,
+                name=f"arrival_prop_nonnegative_{v}_{a}_{t}",
             )
-            if (v, a, t) in y:
-                outside += Q[v][a][k][v] * y[v, a, t]
-            m.addConstr(xm[k, v, a, t_arr] == outside, name=f"xm_value_{k}_{v}_{a}_{t}")
+
 
     #----------------------------flow conservation constraints----------------------------
     for k in commodities:
@@ -220,17 +211,14 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
                     if (k, v, a, t) in x
                 )
                 inflow = gp.quicksum(
-                    xm[k, v, a, t]
+                    arrival_expr[k,v,a,t]
                     for v in arcs_type
                     for a in in_arcs[i]
-                    if (k, v, a, t) in xm
+                    if (k, v, a, t) in arrival_expr
                 )
 
                 rhs = gp.LinExpr(d_it.get((k, i, t), 0.0))
-                # ver_time_horizon: 지구연료 recurring source (LEO/Moon, t<seam 에만 주입).
-                #   tail[seam,T) 은 seam 걸친 아크 "도착"용일 뿐이라 주입을 막는다.  seam 은 ss 에
-                #   glue 되므로 tail 주입을 허용하면 싼(×1) 연료가 정상상태 시작재고로 역류(누수)한다.
-                if k == "Prop" and i in ("LEO", "Moon") and t < seam:
+                if k == "Prop" and i in ("LEO", "Moon"):
                     rhs += earth_prop[i, t]
                 #처음 탱크
                 if t == 0 and i == "Moon":
@@ -351,8 +339,10 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
 
     #---------------------ISRU operation------------------------
     for e in E:
-        for t in range(T): 
+        for t in range(T):
             m.addConstr(q_operation[e, t] <= q[e], name=f"prod_cap_{e}_{t}")
+        # The final point has no outgoing interval in which production can be used.
+        m.addConstr(q_operation[e, T - 1] == 0, name=f"prod_terminal_{e}")
 
     #---------------------vehicle flow conservation------------------------
     # ---------------- 초기 우주선 배치 노드 ----------------
@@ -383,24 +373,6 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
                 m.addConstr(arrive + init >= depart,
                             name=f"veh_cons_{v}_{i}_{t}")
 
-    #---------------------ver_time_horizon: 정상상태 seam glue------------------------
-    # seam(se)을 ss 에 꿰매어 정상상태 블록 [ss, seam) 이 스스로 반복하게 만든다.
-    # seam 을 가로지르는 모든 아크(출발 ss-j == seam-j, j=0..tau-1)의 화물 x 와 우주선 y 를
-    # 동일하게 강제 -> 정지재고(hold, τ=1, j=0) + 비행중 화물/우주선(move, τ=2, j=0,1)까지 전부 닫힘.
-    # x(출발)를 묶으면 xm(도착)=Q·x 도 자동 일치하므로 도착 변수는 따로 건드리지 않는다.
-    for a, arc in enumerate(arcs):
-        for j in range(arc.tau):
-            ts, te = ss - j, seam - j
-            for c in commodities:
-                for v in arcs_type:
-                    if (c, v, a, ts) in x and (c, v, a, te) in x:
-                        m.addConstr(x[c, v, a, ts] == x[c, v, a, te],
-                                    name=f"seam_x_{c}_{v}_{a}_{j}")
-            for v in ["OTV", "RT"]:
-                if (v, a, ts) in y and (v, a, te) in y:
-                    m.addConstr(y[v, a, ts] == y[v, a, te],
-                                name=f"seam_y_{v}_{a}_{j}")
-
      #------------------------q<=My------------------------
     # Big-M bounds ISRU plant mass: never larger than what is needed to make the
     # whole mission's propellant on the Moon.  Derived from total payload demand
@@ -409,7 +381,7 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
     # be too small at high demand and silently cut optimal solutions.
     total_pl_demand = sum(-val for (k, i, t), val in d_it.items()
                           if k == "PL" and val < 0.0)
-    op_days = max(1, T - data.mission["setup_steps"]) * data.mission["days_per_step"]
+    op_days = max(1, data.mission["mission_days"])
     swe_rate = 0.02917 * 2 / 1.5    # kg water / day per kg SWE (linear productivity)
     # assume up to ~40 kg propellant produced per kg payload (delivered prop plus
     # lunar climb-out overhead), water:propellant ~ 1:1.
@@ -423,13 +395,9 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
     for e in E_Depot:
         m.addConstr(q[e] <= BIG_M * DWE[e], name=f"install_DWE_{e}")
 
-   
-
-    m.optimize()
-
     variables = {
         "x": x,
-        "xm": xm,
+        "xm": arrival_expr,
         "y": y,
         "N_sc": N_sc,
         "DWE": DWE,
@@ -438,7 +406,20 @@ def build_and_solve(data, gurobi_params=None, horizon_years=None):   # ver_time_
         "Storage_Prop": Storage_Prop,
         "q": q,
         "q_operation": q_operation,
-        "earth_prop": earth_prop,   # ver_time_horizon: first_prop -> earth_prop(node,t)
+        "earth_prop": earth_prop,
         "first_Tank": first_Tank,
     }
     return m, variables
+
+
+def solve_model(model):
+    """Optimize a model that has already been built."""
+    model.optimize()
+    return model
+
+
+def build_and_solve(data, gurobi_params=None):
+    """Compatibility wrapper used by the main runner."""
+    model, variables = build_model(data, gurobi_params=gurobi_params)
+    solve_model(model)
+    return model, variables

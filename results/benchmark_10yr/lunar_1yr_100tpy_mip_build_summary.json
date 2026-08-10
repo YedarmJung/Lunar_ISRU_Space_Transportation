@@ -1,0 +1,77 @@
+{
+  "status": 1,
+  "status_name": "LOADED",
+  "has_solution": false,
+  "relax_y": false,
+  "years": 1,
+  "days_per_step": 5,
+  "time_points": 74,
+  "annual_demand_t": 100.0,
+  "total_demand_kg": 100000.0,
+  "demand_by_year_kg": {
+    "1": 100000.0
+  },
+  "model_size": {
+    "variables": 25836,
+    "integer_variables": 5378,
+    "binary_variables": 0,
+    "constraints": 26822,
+    "nonzeros": 143822,
+    "x_variables": 20093,
+    "y_variables": 5364
+  },
+  "fixed_design": {
+    "name": "lunar",
+    "fleet": {
+      "OTV": 4,
+      "RT": 4
+    },
+    "initial_vehicle_node": {
+      "OTV": "LEO",
+      "RT": "Moon"
+    },
+    "swe_capacity_kg": 30000.0,
+    "dwe_capacity_kg": {
+      "LEO": 0.0,
+      "GEO": 0.0,
+      "GTO": 0.0,
+      "EML1": 0.0,
+      "NRHO": 0.0,
+      "LLO": 0.0,
+      "Moon": 10000.0
+    },
+    "storage_h2o_tank_kg": {
+      "LEO": 0.0,
+      "GEO": 0.0,
+      "GTO": 0.0,
+      "EML1": 0.0,
+      "NRHO": 0.0,
+      "LLO": 0.0,
+      "Moon": 8000.0
+    },
+    "storage_prop_tank_kg": {
+      "LEO": 0.0,
+      "GEO": 80000.0,
+      "GTO": 0.0,
+      "EML1": 0.0,
+      "NRHO": 0.0,
+      "LLO": 0.0,
+      "Moon": 120000.0
+    },
+    "initial_inventory_kg": {
+      "Moon": {
+        "H2O_Tank": 2000.0,
+        "Prop_Tank": 40000.0
+      }
+    },
+    "earth_prop_nodes": [
+      "LEO",
+      "GEO",
+      "Moon"
+    ],
+    "notes": "Fixed lunar SWE+DWE at Moon; no facility additions or hardware delivery."
+  },
+  "runtime_s": 0.0,
+  "node_count": 0.0,
+  "solution_count": 0
+}

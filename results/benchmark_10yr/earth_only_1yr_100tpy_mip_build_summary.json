@@ -1,0 +1,72 @@
+{
+  "status": 1,
+  "status_name": "LOADED",
+  "has_solution": false,
+  "relax_y": false,
+  "years": 1,
+  "days_per_step": 5,
+  "time_points": 74,
+  "annual_demand_t": 100.0,
+  "total_demand_kg": 100000.0,
+  "demand_by_year_kg": {
+    "1": 100000.0
+  },
+  "model_size": {
+    "variables": 7855,
+    "integer_variables": 1820,
+    "binary_variables": 0,
+    "constraints": 9059,
+    "nonzeros": 30932,
+    "x_variables": 5889,
+    "y_variables": 1813
+  },
+  "fixed_design": {
+    "name": "earth_only",
+    "fleet": {
+      "OTV": 6,
+      "RT": 0
+    },
+    "initial_vehicle_node": {
+      "OTV": "LEO",
+      "RT": "Moon"
+    },
+    "swe_capacity_kg": 0.0,
+    "dwe_capacity_kg": {
+      "LEO": 0.0,
+      "GEO": 0.0,
+      "GTO": 0.0,
+      "EML1": 0.0,
+      "NRHO": 0.0,
+      "LLO": 0.0,
+      "Moon": 0.0
+    },
+    "storage_h2o_tank_kg": {
+      "LEO": 0.0,
+      "GEO": 0.0,
+      "GTO": 0.0,
+      "EML1": 0.0,
+      "NRHO": 0.0,
+      "LLO": 0.0,
+      "Moon": 0.0
+    },
+    "storage_prop_tank_kg": {
+      "LEO": 0.0,
+      "GEO": 100000.0,
+      "GTO": 0.0,
+      "EML1": 0.0,
+      "NRHO": 0.0,
+      "LLO": 0.0,
+      "Moon": 0.0
+    },
+    "initial_inventory_kg": {},
+    "earth_prop_nodes": [
+      "LEO",
+      "GEO"
+    ],
+    "notes": "No lunar production; Earth propellant at LEO/GEO guarantees recourse."
+  },
+  "build_time_s": 0.07285589999999999,
+  "runtime_s": 0.0,
+  "node_count": 0.0,
+  "solution_count": 0
+}

@@ -1,0 +1,50 @@
+{
+  "name": "irregular_5yr_50tpy",
+  "mission_years": 5,
+  "days_per_year": 360,
+  "days_per_step": 10,
+  "payload_lead_days": 20,
+  "events": [
+    {"year": 1, "event_id": "Y1-E1", "demand_day": 30, "mass_kg": 5000},
+    {"year": 1, "event_id": "Y1-E2", "demand_day": 80, "mass_kg": 8000},
+    {"year": 1, "event_id": "Y1-E3", "demand_day": 130, "mass_kg": 6000},
+    {"year": 1, "event_id": "Y1-E4", "demand_day": 180, "mass_kg": 9000},
+    {"year": 1, "event_id": "Y1-E5", "demand_day": 230, "mass_kg": 7000},
+    {"year": 1, "event_id": "Y1-E6", "demand_day": 280, "mass_kg": 10000},
+    {"year": 1, "event_id": "Y1-E7", "demand_day": 330, "mass_kg": 5000},
+
+    {"year": 2, "event_id": "Y2-E1", "demand_day": 390, "mass_kg": 6000},
+    {"year": 2, "event_id": "Y2-E2", "demand_day": 430, "mass_kg": 4000},
+    {"year": 2, "event_id": "Y2-E3", "demand_day": 470, "mass_kg": 7000},
+    {"year": 2, "event_id": "Y2-E4", "demand_day": 520, "mass_kg": 8000},
+    {"year": 2, "event_id": "Y2-E5", "demand_day": 570, "mass_kg": 5000},
+    {"year": 2, "event_id": "Y2-E6", "demand_day": 620, "mass_kg": 9000},
+    {"year": 2, "event_id": "Y2-E7", "demand_day": 670, "mass_kg": 6000},
+    {"year": 2, "event_id": "Y2-E8", "demand_day": 710, "mass_kg": 5000},
+
+    {"year": 3, "event_id": "Y3-E1", "demand_day": 750, "mass_kg": 7000},
+    {"year": 3, "event_id": "Y3-E2", "demand_day": 810, "mass_kg": 9000},
+    {"year": 3, "event_id": "Y3-E3", "demand_day": 870, "mass_kg": 6000},
+    {"year": 3, "event_id": "Y3-E4", "demand_day": 930, "mass_kg": 12000},
+    {"year": 3, "event_id": "Y3-E5", "demand_day": 990, "mass_kg": 8000},
+    {"year": 3, "event_id": "Y3-E6", "demand_day": 1050, "mass_kg": 8000},
+
+    {"year": 4, "event_id": "Y4-E1", "demand_day": 1110, "mass_kg": 4000},
+    {"year": 4, "event_id": "Y4-E2", "demand_day": 1150, "mass_kg": 5000},
+    {"year": 4, "event_id": "Y4-E3", "demand_day": 1190, "mass_kg": 6000},
+    {"year": 4, "event_id": "Y4-E4", "demand_day": 1230, "mass_kg": 7000},
+    {"year": 4, "event_id": "Y4-E5", "demand_day": 1270, "mass_kg": 3000},
+    {"year": 4, "event_id": "Y4-E6", "demand_day": 1310, "mass_kg": 8000},
+    {"year": 4, "event_id": "Y4-E7", "demand_day": 1350, "mass_kg": 5000},
+    {"year": 4, "event_id": "Y4-E8", "demand_day": 1390, "mass_kg": 6000},
+    {"year": 4, "event_id": "Y4-E9", "demand_day": 1430, "mass_kg": 6000},
+
+    {"year": 5, "event_id": "Y5-E1", "demand_day": 1470, "mass_kg": 8000},
+    {"year": 5, "event_id": "Y5-E2", "demand_day": 1520, "mass_kg": 6000},
+    {"year": 5, "event_id": "Y5-E3", "demand_day": 1570, "mass_kg": 9000},
+    {"year": 5, "event_id": "Y5-E4", "demand_day": 1620, "mass_kg": 5000},
+    {"year": 5, "event_id": "Y5-E5", "demand_day": 1670, "mass_kg": 7000},
+    {"year": 5, "event_id": "Y5-E6", "demand_day": 1720, "mass_kg": 10000},
+    {"year": 5, "event_id": "Y5-E7", "demand_day": 1770, "mass_kg": 5000}
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "status": 2,
+  "status_name": "OPTIMAL",
+  "has_solution": true,
+  "relax_y": true,
+  "years": 10,
+  "days_per_step": 5,
+  "time_points": 731,
+  "annual_demand_t": 100.0,
+  "total_demand_kg": 1000000.0,
+  "demand_by_year_kg": {
+    "1": 100000.0,
+    "2": 100000.0,
+    "3": 100000.0,
+    "4": 100000.0,
+    "5": 100000.0,
+    "6": 100000.0,
+    "7": 100000.0,
+    "8": 100000.0,
+    "9": 100000.0,
+    "10": 100000.0
+  },
+  "model_size": {
+    "variables": 259728,
+    "integer_variables": 0,
+    "binary_variables": 0,
+    "constraints": 269255,
+    "nonzeros": 1447310,
+    "x_variables": 202082,
+    "y_variables": 53982
+  },
+  "fixed_design": {
+    "name": "lunar",
+    "fleet": {
+      "OTV": 4,
+      "RT": 4
+    },
+    "initial_vehicle_node": {
+      "OTV": "LEO",
+      "RT": "Moon"
+    },
+    "swe_capacity_kg": 30000.0,
+    "dwe_capacity_kg": {
+      "LEO": 0.0,
+      "GEO": 0.0,
+      "GTO": 0.0,
+      "EML1": 0.0,
+      "NRHO": 0.0,
+      "LLO": 0.0,
+      "Moon": 10000.0
+    },
+    "storage_h2o_tank_kg": {
+      "LEO": 0.0,
+      "GEO": 0.0,
+      "GTO": 0.0,
+      "EML1": 0.0,
+      "NRHO": 0.0,
+      "LLO": 0.0,
+      "Moon": 8000.0
+    },
+    "storage_prop_tank_kg": {
+      "LEO": 0.0,
+      "GEO": 80000.0,
+      "GTO": 0.0,
+      "EML1": 0.0,
+      "NRHO": 0.0,
+      "LLO": 0.0,
+      "Moon": 120000.0
+    },
+    "initial_inventory_kg": {
+      "Moon": {
+        "H2O_Tank": 2000.0,
+        "Prop_Tank": 40000.0
+      }
+    },
+    "earth_prop_nodes": [
+      "LEO",
+      "GEO",
+      "Moon"
+    ],
+    "notes": "Fixed lunar SWE+DWE at Moon; no facility additions or hardware delivery."
+  },
+  "build_time_s": 2.821183,
+  "runtime_s": 16.44700002670288,
+  "node_count": 0.0,
+  "solution_count": 1,
+  "objective": 5671121346.442227,
+  "best_bound": 5671121346.442227,
+  "mip_gap": 0.0,
+  "earth_prop_cost": 5671120866.870573,
+  "earth_prop_kg_by_node": {
+    "LEO": 1204119.8627738473,
+    "GEO": 53332.96109838976,
+    "Moon": 0.0
+  },
+  "earth_prop_kg_by_year": {
+    "1": 202681.5266551624,
+    "2": 86224.36307889486,
+    "3": 93585.37814816016,
+    "4": 171370.86999040857,
+    "5": 130903.24183418455,
+    "6": 104597.79536720156,
+    "7": 102896.1851222034,
+    "8": 121031.94556662286,
+    "9": 126857.08588251406,
+    "10": 117304.43222688511
+  },
+  "move_trips_by_vehicle": {
+    "OTV": 122.32712803117772,
+    "RT": 357.24452625252536
+  },
+  "terminal_vehicle_by_node": {
+    "OTV": {
+      "GEO": 4.0
+    },
+    "RT": {
+      "GEO": 0.017394547283414583,
+      "GTO": 3.9826054527165855
+    }
+  },
+  "move_trips_by_route": {
+    "OTV:EML1->GEO": 0.01991743111715713,
+    "OTV:GEO->EML1": 0.01991743111715713,
+    "OTV:GEO->GTO": 0.9010648475695643,
+    "OTV:GEO->NRHO": 20.098935152430432,
+    "OTV:GTO->GEO": 24.999999999999986,
+    "OTV:GTO->LEO": 26.06826778027793,
+    "OTV:LEO->GTO": 30.120090236235,
+    "OTV:NRHO->GTO": 20.047112696473352,
+    "OTV:NRHO->LEO": 0.05182245595707824,
+    "RT:EML1->GEO": 0.013647749617250201,
+    "RT:EML1->LLO": 0.022567874075779565,
+    "RT:GTO->LLO": 0.42031451841046863,
+    "RT:GTO->NRHO": 0.16182856688531738,
+    "RT:LLO->EML1": 0.03601438278638605,
+    "RT:LLO->GEO": 0.003746797666164381,
+    "RT:LLO->GTO": 4.215483393934102,
+    "RT:LLO->Moon": 121.721567237498,
+    "RT:LLO->NRHO": 52.38217313316483,
+    "RT:Moon->GTO": 0.34926514407827386,
+    "RT:Moon->LLO": 125.37068843247532,
+    "RT:Moon->NRHO": 0.0016136609440831075,
+    "RT:NRHO->EML1": 0.00020124090664371444,
+    "RT:NRHO->LLO": 52.54541412008759
+  }
+}

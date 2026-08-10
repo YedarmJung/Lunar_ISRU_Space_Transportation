@@ -1,4 +1,6 @@
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Tuple
 
 
@@ -28,100 +30,139 @@ class NetworkData:
 
 
 def periods(T, tau=1):
+    """Departure times whose arrival remains inside the mission horizon."""
     return tuple(range(0, T - tau))
-
-
-def amort_factor(mission, horizon_years):
-    """정상상태 블록(n_steady 주기)의 비용을 지평 H(년)로 환산하는 배율.
-
-    AMORT = periods(H) / n_steady,  periods(H) = H*365 / period_days.
-    목적함수의 opex 항에 AMORT 를 곱하면 짧은 window 최적해가 곧 미션-H 최적해가 된다.
-    """
-    period_days = mission["period_steps"] * mission["days_per_step"]
-    periods_H = horizon_years * 365.0 / period_days
-    return periods_H / mission["n_steady"], periods_H
 
 
 def activity_component(facility_name):
     return f"act_{facility_name}"
 
 
-def add_two_way(arcs, tail, head, tau, active_times, delta_v_km_s=None, isp_s=420.0):
+def add_two_way(arcs, tail, head, tau, active_times, delta_v_km_s=None):
     arcs.append(Arc(tail, head, tau, "move", active_times, delta_v_km_s=delta_v_km_s))
     arcs.append(Arc(head, tail, tau, "move", active_times, delta_v_km_s=delta_v_km_s))
 
 
-def get_data(mission_years=10, days_per_step=5, n_rollin=1, n_steady=1,
-             demand_period_days=60, setup_days=None, annual_t=100):   # ver_time_horizon: n_rollin/n_steady + cadence sweep
-    nodes = [
-        "LEO",
-        "GEO",
-        "GTO",
-        "EML1",
-        "NRHO",
-        "LLO",
-        "Moon"
-    ]
+def _load_demand_profile(profile_path):
+    path = Path(profile_path)
+    with path.open("r", encoding="utf-8") as f:
+        profile = json.load(f)
 
-    # Candidate ISRU facilities.  Each facility gets an activity column in x
-    # with the deterministic name act_{facility_name}.
+    required = {
+        "mission_years",
+        "days_per_year",
+        "days_per_step",
+        "payload_lead_days",
+        "events",
+    }
+    missing = sorted(required - profile.keys())
+    if missing:
+        raise ValueError(f"Demand profile is missing fields: {', '.join(missing)}")
 
-    commodities = ["PL", "H2O", "Prop", "H2O_Tank", "Prop_Tank"] # 끝 두개는 RT 가 물자를 운반할 때 쓰는 탱크임
+    mission_years = int(profile["mission_years"])
+    days_per_year = int(profile["days_per_year"])
+    days_per_step = int(profile["days_per_step"])
+    lead_days = int(profile["payload_lead_days"])
+    if min(mission_years, days_per_year, days_per_step) <= 0:
+        raise ValueError("mission_years, days_per_year, and days_per_step must be positive")
 
-    depot_node = [
-        "Moon",
-        "GEO",
-        "GTO",
-        "EML1",
-        "NRHO",
-        "LLO",
-    ]
+    mission_days = mission_years * days_per_year
+    if mission_days % days_per_step != 0:
+        raise ValueError("The mission duration must be divisible by days_per_step")
+    if lead_days < 0 or lead_days % days_per_step != 0:
+        raise ValueError("payload_lead_days must be a nonnegative multiple of days_per_step")
 
-    DAYS_PER_STEP = days_per_step
-    MISSION_YEARS = mission_years
+    normalized_events = []
+    seen_ids = set()
+    for index, raw in enumerate(profile["events"]):
+        event_missing = sorted({"year", "event_id", "demand_day", "mass_kg"} - raw.keys())
+        if event_missing:
+            raise ValueError(
+                f"Demand event {index} is missing fields: {', '.join(event_missing)}"
+            )
 
-    # Mission timing is defined in DAYS and converted to step counts, so changing
-    # DAYS_PER_STEP automatically rescales the setup phase, demand cadence, and
-    # payload lead time.  max(1, .) keeps every count at >= 1 step.
-    # ver_time_horizon: cadence(수요 간격)를 sweep 가능하게 파라미터화.
-    DEMAND_PERIOD_DAYS = demand_period_days                     # GEO payload pulse cadence
-    SUPPLY_LEAD_DAYS = round(2.0/3.0 * DEMAND_PERIOD_DAYS)      # ~2/3 period 전에 공급(=40 @ 60d)
-    if setup_days is None:
-        setup_days = 1.5 * DEMAND_PERIOD_DAYS                  # setup >= 1.5 x 수요간격 (ISRU 사전적재)
-    SETUP_DAYS = setup_days                                     # no-demand setup phase
+        year = int(raw["year"])
+        event_id = str(raw["event_id"])
+        demand_day = raw["demand_day"]
+        mass_kg = raw["mass_kg"]
+        if isinstance(demand_day, bool) or not isinstance(demand_day, (int, float)):
+            raise ValueError(f"Demand event {event_id} has a nonnumeric demand_day")
+        if int(demand_day) != demand_day:
+            raise ValueError(f"Demand event {event_id} demand_day must be an integer")
+        demand_day = int(demand_day)
+        if year < 1 or year > mission_years:
+            raise ValueError(f"Demand event {event_id} has year outside 1..{mission_years}")
+        if demand_day < 0 or demand_day > mission_days:
+            raise ValueError(
+                f"Demand event {event_id} demand_day must be inside 0..{mission_days}"
+            )
+        if demand_day % days_per_step != 0:
+            raise ValueError(
+                f"Demand event {event_id} demand_day must be a multiple of {days_per_step}"
+            )
+        if isinstance(mass_kg, bool) or not isinstance(mass_kg, (int, float)) or mass_kg <= 0:
+            raise ValueError(f"Demand event {event_id} mass_kg must be positive")
 
-    # ver_time_horizon: T 를 "미션 전체 길이"가 아니라 정상상태 window 로 구성한다.
-    #   [0, ss)      setup + roll-in(n_rollin 주기): 전이 흡수 (비용 ×1, ramp)
-    #   [ss, seam)   정상상태 블록(n_steady 주기): amortization 대상 (비용 ×AMORT)
-    #   seam         seam(= ss 에 glue), [seam, T) 는 seam 걸친 τ=2 아크 도착 tail
-    # mission_years 는 이제 amortization 지평 H 로만 쓰이고 T 를 결정하지 않는다.
-    setup_steps  = max(1, round(SETUP_DAYS / DAYS_PER_STEP))
-    period_steps = max(1, round(DEMAND_PERIOD_DAYS / DAYS_PER_STEP))
-    MAX_TAU = 2
-    steady_start = setup_steps + n_rollin * period_steps    # ver_time_horizon: ss (2번째 펄스)
-    seam         = steady_start + n_steady * period_steps   # ver_time_horizon: se (ss 에 glue)
-    T = seam + MAX_TAU + 1                                   # ver_time_horizon: 도착 tail 확보]
-    all_hold_times = periods(T, tau=1)
+        unique_id = (year, event_id)
+        if unique_id in seen_ids:
+            raise ValueError(f"Duplicate demand event id: year={year}, event_id={event_id}")
+        seen_ids.add(unique_id)
 
-    #payload
-    GEO_DEMAND_PL_KG = annual_t *1000.0 * period_steps * days_per_step / 365
+        demand_step = demand_day // days_per_step
+        normalized_events.append(
+            {
+                "year": year,
+                "event_id": event_id,
+                "demand_day": demand_day,
+                "demand_step": demand_step,
+                "supply_day": max(0, demand_day - lead_days),
+                "supply_step": max(0, demand_step - lead_days // days_per_step),
+                "mass_kg": float(mass_kg),
+            }
+        )
 
+    normalized_events.sort(key=lambda event: (event["demand_step"], event["year"], event["event_id"]))
+    profile["events"] = normalized_events
+    profile["profile_path"] = str(path)
+    return profile
+
+
+def get_data(profile_path):
+    """Build the full-horizon network from an explicit payload-demand profile."""
+    profile = _load_demand_profile(profile_path)
+
+    nodes = ["LEO", "GEO", "GTO", "EML1", "NRHO", "LLO", "Moon"]
+    commodities = ["PL", "H2O", "Prop", "H2O_Tank", "Prop_Tank"]
+    depot_node = ["Moon", "GEO", "GTO", "EML1", "NRHO", "LLO"]
+
+    mission_years = int(profile["mission_years"])
+    days_per_year = int(profile["days_per_year"])
+    days_per_step = int(profile["days_per_step"])
+    mission_days = mission_years * days_per_year
+    mission_steps = mission_days // days_per_step
+    T = mission_steps + 1
+
+    demand_by_year_kg = {
+        str(year): sum(
+            event["mass_kg"] for event in profile["events"] if event["year"] == year
+        )
+        for year in range(1, mission_years + 1)
+    }
     mission = {
-        "days_per_step": DAYS_PER_STEP,
-        "mission_years": MISSION_YEARS,        # ver_time_horizon: amortization 지평 H (T 와 무관)
-        "setup_steps": setup_steps,
-        "GEO_demand_period": period_steps,     # (기존 이름 유지: build_dit/sweep 호환)
-        "period_steps": period_steps,          # ver_time_horizon
-        "n_rollin": n_rollin,                  # ver_time_horizon
-        "n_steady": n_steady,                  # ver_time_horizon
-        "steady_start": steady_start,          # ver_time_horizon: ss
-        "seam": seam,                          # ver_time_horizon: se
-        "n_pulses": n_rollin + n_steady + 1,   # ver_time_horizon: 총 GEO 수요 횟수(seam 포함)
-        "GEO_demand_PL_kg": GEO_DEMAND_PL_KG,
-        "PL_supply_lead": max(1, round(SUPPLY_LEAD_DAYS / DAYS_PER_STEP)),
+        "profile_name": profile.get("name", Path(profile_path).stem),
+        "profile_path": profile["profile_path"],
+        "mission_years": mission_years,
+        "days_per_year": days_per_year,
+        "days_per_step": days_per_step,
+        "mission_days": mission_days,
+        "mission_steps": mission_steps,
+        "payload_lead_days": int(profile["payload_lead_days"]),
+        "PL_supply_lead": int(profile["payload_lead_days"]) // days_per_step,
+        "demand_events": profile["events"],
+        "demand_by_year_kg": demand_by_year_kg,
+        "total_payload_kg": sum(event["mass_kg"] for event in profile["events"]),
     }
 
-    # Fixed vehicle designs.  None means the scenario still needs a final value.
     vehicles = {
         "OTV": {
             "payload_cap": 40000.0,
@@ -129,12 +170,6 @@ def get_data(mission_years=10, days_per_step=5, n_rollin=1, n_steady=1,
             "dry_mass": 6000.0,
             "isp_s": 420,
         },
-#        "RT": {
-#            "payload_cap": 40000.0,
-#            "propellant_cap": 40000.0,
-#            "dry_mass": 6000.0,
-#            "isp_s": 420.0,
-#        },
         "RT": {
             "payload_cap": 30000.0,
             "propellant_cap": 20000.0,
@@ -142,46 +177,38 @@ def get_data(mission_years=10, days_per_step=5, n_rollin=1, n_steady=1,
             "isp_s": 420.0,
         },
     }
-
-    arc_type = [
-        "OTV",
-        "RT",
-        "hold"
-    ]
+    arc_type = ["OTV", "RT", "hold"]
 
     arcs = []
-
-    # Holdover arcs carry inventory and host ISRU activity components.
+    all_hold_times = periods(T, tau=1)
     for node in nodes:
         arcs.append(Arc(node, node, 1, "hold", all_hold_times, 0))
 
     add_two_way(arcs, "LEO", "GEO", 1, periods(T, 1), delta_v_km_s=4.33)
     add_two_way(arcs, "LEO", "GTO", 1, periods(T, 1), delta_v_km_s=2.86)
     add_two_way(arcs, "LEO", "EML1", 2, periods(T, 2), delta_v_km_s=3.77)
-    add_two_way(arcs, "LEO", "NRHO", 2, periods(T, 2), delta_v_km_s=3.6) #3.95
+    add_two_way(arcs, "LEO", "NRHO", 2, periods(T, 2), delta_v_km_s=3.6)
     add_two_way(arcs, "LEO", "LLO", 2, periods(T, 2), delta_v_km_s=4.04)
-    add_two_way(arcs, "LEO", "Moon", 2, periods(T,2), delta_v_km_s=5.93)
+    add_two_way(arcs, "LEO", "Moon", 2, periods(T, 2), delta_v_km_s=5.93)
 
     add_two_way(arcs, "GEO", "GTO", 1, periods(T, 1), delta_v_km_s=1.47)
     add_two_way(arcs, "GEO", "EML1", 2, periods(T, 2), delta_v_km_s=1.38)
-    add_two_way(arcs, "GEO", "NRHO", 2, periods(T, 2), delta_v_km_s=1.47) #1.47
+    add_two_way(arcs, "GEO", "NRHO", 2, periods(T, 2), delta_v_km_s=1.47)
     add_two_way(arcs, "GEO", "LLO", 2, periods(T, 2), delta_v_km_s=2.05)
-    add_two_way(arcs, "GEO", "Moon", 2, periods(T,2), delta_v_km_s=3.92)
+    add_two_way(arcs, "GEO", "Moon", 2, periods(T, 2), delta_v_km_s=3.92)
 
-    add_two_way(arcs, "GTO", "EML1", 2, periods(T, 2),  delta_v_km_s=1.31)
-    add_two_way(arcs, "GTO", "NRHO", 2, periods(T, 2), delta_v_km_s=1.1) #1.1
+    add_two_way(arcs, "GTO", "EML1", 2, periods(T, 2), delta_v_km_s=1.31)
+    add_two_way(arcs, "GTO", "NRHO", 2, periods(T, 2), delta_v_km_s=1.1)
     add_two_way(arcs, "GTO", "LLO", 2, periods(T, 2), delta_v_km_s=1.58)
-    add_two_way(arcs, "GTO", "Moon", 2, periods(T,2), delta_v_km_s=3.47)
+    add_two_way(arcs, "GTO", "Moon", 2, periods(T, 2), delta_v_km_s=3.47)
 
     add_two_way(arcs, "EML1", "NRHO", 1, periods(T, 1), delta_v_km_s=0.2)
     add_two_way(arcs, "EML1", "LLO", 1, periods(T, 1), delta_v_km_s=0.64)
-    add_two_way(arcs, "EML1", "Moon", 2, periods(T,2), delta_v_km_s=2.51)
+    add_two_way(arcs, "EML1", "Moon", 2, periods(T, 2), delta_v_km_s=2.51)
 
     add_two_way(arcs, "NRHO", "LLO", 1, periods(T, 1), delta_v_km_s=0.73)
-    add_two_way(arcs, "NRHO", "Moon", 1, periods(T,1), delta_v_km_s=2.6)
-
-    add_two_way(arcs, "LLO", "Moon", 1, periods(T,1), delta_v_km_s=1.87)
-
+    add_two_way(arcs, "NRHO", "Moon", 1, periods(T, 1), delta_v_km_s=2.6)
+    add_two_way(arcs, "LLO", "Moon", 1, periods(T, 1), delta_v_km_s=1.87)
 
     return NetworkData(
         nodes=nodes,
@@ -189,7 +216,7 @@ def get_data(mission_years=10, days_per_step=5, n_rollin=1, n_steady=1,
         T=T,
         arcs=arcs,
         vehicles=vehicles,
-        arc_type = arc_type,
+        arc_type=arc_type,
         mission=mission,
-        depot_node = depot_node
+        depot_node=depot_node,
     )

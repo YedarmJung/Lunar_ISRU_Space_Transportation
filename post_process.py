@@ -3,7 +3,7 @@ import math
 from pathlib import Path
 
 
-DEFAULT_SOLUTION = Path("results/sweep/cases") / "y6_p90_d100.json"
+DEFAULT_SOLUTION = Path("results") / "latest_solution.json"
 DEFAULT_PLOT_DIR = Path("results") / "plots"
 
 # top-to-bottom order for the time-expanded plot (Earth cluster -> Moon cluster)
@@ -59,7 +59,7 @@ def generate_plots(solution_path=DEFAULT_SOLUTION, plot_dir=DEFAULT_PLOT_DIR):
         plot_network_flow_map,
         plot_cost_breakdown,
         plot_cost_share,
-        plot_amortized_cost,   # ver_time_horizon
+        plot_demand_profile,
         plot_infrastructure,
         plot_production,
     ]
@@ -124,12 +124,12 @@ def plot_flow_over_time(solution, plot_dir):
     for node in nodes:
         ax.axhline(y[node], color="0.9", lw=0.8, zorder=0)
 
-    # window structure guides (setup end, steady start ss, seam se)
     mis = solution["mission"]
-    for xline, lab in [(mis["setup_steps"], "setup"),
-                       (mis["steady_start"], "ss"), (mis["seam"], "seam")]:
+    steps_per_year = mis["days_per_year"] // mis["days_per_step"]
+    for year in range(1, mis["mission_years"] + 1):
+        xline = year * steps_per_year
         ax.axvline(xline, color="0.75", ls=":", lw=1.0, zorder=1)
-        ax.text(xline, -0.55, lab, fontsize=8, color="0.45",
+        ax.text(xline, -0.55, f"Y{year}", fontsize=8, color="0.45",
                 ha="center", va="top")
 
     for f in flows:
@@ -159,24 +159,23 @@ def plot_flow_over_time(solution, plot_dir):
             zorder=zorder,
         )
 
-    # ---- payload supply (LEO) / demand (GEO) stars, from mission cadence ----
-    setup = mis["setup_steps"]
-    period = mis["GEO_demand_period"]
-    lead = mis["PL_supply_lead"]
-    demand_t = [setup + k * period for k in range(mis["n_pulses"])]
-    supply_t = [max(0, t - lead) for t in demand_t]
+    # Payload supply/demand events from the explicit input profile.
+    events = mis["demand_events"]
+    max_mass = max((event["mass_kg"] for event in events), default=1.0)
     if "GEO" in y:
-        for t in demand_t:
-            ax.scatter(t, y["GEO"], marker="*", s=360, color="crimson",
+        for event in events:
+            size = 140 + 300 * event["mass_kg"] / max_mass
+            ax.scatter(event["demand_step"], y["GEO"], marker="*", s=size, color="crimson",
                        edgecolor="black", linewidth=0.6, zorder=6)
     if "LEO" in y:
-        for t in supply_t:
-            ax.scatter(t, y["LEO"], marker="*", s=360, color="gold",
+        for event in events:
+            size = 140 + 300 * event["mass_kg"] / max_mass
+            ax.scatter(event["supply_step"], y["LEO"], marker="*", s=size, color="gold",
                        edgecolor="black", linewidth=0.6, zorder=6)
 
     ax.set_yticks([y[node] for node in nodes])
     ax.set_yticklabels(nodes)
-    ax.set_xlabel("time step")
+    ax.set_xlabel("mission year (time step = 10 days)")
     ax.set_ylabel("node")
     ax.set_title("Commodity flow over time", pad=36)
 
@@ -193,8 +192,12 @@ def plot_flow_over_time(solution, plot_dir):
 
     ax.grid(axis="x", color="0.93", lw=0.8)
     ax.set_xlim(-0.5, solution["T"] - 0.5)
-    step = max(1, solution["T"] // 25)
-    ax.set_xticks(range(0, solution["T"], step))
+    year_ticks = [year * steps_per_year for year in range(mis["mission_years"] + 1)]
+    ax.set_xticks(year_ticks)
+    ax.set_xticklabels(
+        [f"{year}\nstep {year * steps_per_year}\nday {year * mis['days_per_year']}"
+         for year in range(mis["mission_years"] + 1)]
+    )
     fig.tight_layout()
 
     path = plot_dir / "flow_over_time.png"
@@ -320,12 +323,8 @@ def plot_cost_share(solution, plot_dir):
         "DWE": breakdown.get("DWE", 0.0),
         "storage": breakdown.get("storage", 0.0),
         "spacecraft": breakdown.get("spacecraft", 0.0),
-        "maintenance": breakdown.get("maintenance_over_H", 0.0),
-        "earth_prop": (
-            breakdown.get("earth_prop_ramp", 0.0)
-            + breakdown.get("earth_prop_over_H", 0.0)
-            + breakdown.get("earth_prop_tail", 0.0)
-        ),
+        "maintenance": breakdown.get("maintenance", 0.0),
+        "earth_prop": breakdown.get("earth_prop", 0.0),
     }
     labels = list(costs)
     values = [max(0.0, costs[label]) for label in labels]
@@ -371,43 +370,43 @@ def plot_cost_share(solution, plot_dir):
     return path
 
 
-def plot_amortized_cost(solution, plot_dir):   # ver_time_horizon
-    """total(H) = capex + opex_per_period * periods(H) 와 cost_per_kg(H) 를 H 축으로.
-
-    이 solve 의 config(SWE/DWE/함대 등)를 고정한 채 지평 H 를 바꿔가며 그린다.
-    Earth <-> lunar 교차(break-even)는 sweep.py 에서 config 를 바꿔 풀어야 나온다.
-    """
-    am = solution.get("amortization")
-    if not am:
+def plot_demand_profile(solution, plot_dir):
+    mission = solution.get("mission", {})
+    events = mission.get("demand_events", [])
+    if not events:
         return None
-    capex, opex = am["capex_total"], am["opex_per_period"]
-    period_days, pulse = am["period_days"], am["pulse_kg"]
-    H0 = am["horizon_years"]
 
-    Hs = [0.25 * k for k in range(1, max(2, int(H0 * 2 / 0.25)) + 1)]
-    periods = [h * 365.0 / period_days for h in Hs]
-    total = [capex + opex * p for p in periods]
-    cpk = [(capex + opex * p) / (pulse * p) if p > 0 else float("nan") for p in periods]
+    days_per_year = mission["days_per_year"]
+    mission_years = mission["mission_years"]
+    event_year = [event["demand_day"] / days_per_year for event in events]
+    event_tonnes = [event["mass_kg"] / 1000.0 for event in events]
+    annual_tonnes = [
+        mission["demand_by_year_kg"].get(str(year), 0.0) / 1000.0
+        for year in range(1, mission_years + 1)
+    ]
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
-    ax1.plot(Hs, [t / 1e9 for t in total], "-", color="slateblue", lw=2)
-    ax1.axhline(capex / 1e9, ls="--", color="0.6", lw=1, label="capex (one-time)")
-    ax1.axvline(H0, ls=":", color="crimson", lw=1.2, label=f"solved H = {H0:g} yr")
-    ax1.set_xlabel("mission horizon H [yr]")
-    ax1.set_ylabel("lifecycle total cost [$B]")
-    ax1.set_title("Amortized  total(H) = capex + opex x periods(H)")
-    ax1.legend(fontsize=8)
+    ax1.scatter(event_year, event_tonnes, s=55, color="crimson", edgecolor="black", linewidth=0.4)
+    for x, mass in zip(event_year, event_tonnes):
+        ax1.vlines(x, 0, mass, color="crimson", alpha=0.25, lw=1)
+    ax1.set_xlabel("mission year (360 days/year)")
+    ax1.set_ylabel("event payload [t]")
+    ax1.set_title("Irregular GEO payload events")
+    ax1.set_xlim(0, mission_years)
     ax1.grid(color="0.92")
 
-    ax2.plot(Hs, cpk, "-", color="seagreen", lw=2)
-    ax2.axvline(H0, ls=":", color="crimson", lw=1.2)
-    ax2.set_xlabel("mission horizon H [yr]")
-    ax2.set_ylabel("cost per kg to GEO [$/kg]")
-    ax2.set_title("Amortized cost per kg (this config)")
-    ax2.grid(color="0.92")
+    years = list(range(1, mission_years + 1))
+    ax2.bar(years, annual_tonnes, color="slateblue")
+    ax2.set_xlabel("mission year")
+    ax2.set_ylabel("annual payload [t]")
+    ax2.set_title("Annual GEO payload total (reported, not constrained)")
+    ax2.set_xticks(years)
+    ax2.grid(axis="y", color="0.92")
+    for year, mass in zip(years, annual_tonnes):
+        ax2.text(year, mass, f"{mass:g}", ha="center", va="bottom", fontsize=8)
 
     fig.tight_layout()
-    path = plot_dir / "amortized_cost.png"
+    path = plot_dir / "demand_profile.png"
     fig.savefig(path, dpi=180)
     plt.close(fig)
     return path
@@ -475,7 +474,12 @@ def plot_production(solution, plot_dir):
         ax.plot(times, series[e], marker="o", ms=3, lw=1.2, color=plt.cm.tab10.colors[i % 10], label=e)
 
     ax.set_title("ISRU operated mass over time (q_operation)")
-    ax.set_xlabel("time step")
+    mission = solution["mission"]
+    steps_per_year = mission["days_per_year"] // mission["days_per_step"]
+    year_ticks = [year * steps_per_year for year in range(mission["mission_years"] + 1)]
+    ax.set_xticks(year_ticks)
+    ax.set_xticklabels([str(year) for year in range(mission["mission_years"] + 1)])
+    ax.set_xlabel("mission year (time step = 10 days)")
     ax.set_ylabel("operated plant mass [kg]")
     ax.legend(fontsize=8, ncol=min(4, len(facilities)))
     ax.grid(color="0.92")
