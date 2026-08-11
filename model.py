@@ -5,6 +5,8 @@ from build_Q import build_Q
 from build_dit import build_dit
 from build_cost import BUILD_COST as bc
 
+def t_to_year(t, data):
+    return t//(data.mission["days_per_year"]//data.mission["days_per_step"])
 
 def build_model(data, gurobi_params=None):
     nodes = data.nodes
@@ -52,7 +54,7 @@ def build_model(data, gurobi_params=None):
                     arc_components = ["PL", "Prop"]
                 elif v == "RT":
                     # RT: 물과 propellant만 운반, 필요하면 Hw도 허용 가능
-                    arc_components = ["H2O", "Prop", "H2O_Tank", "Prop_Tank"]
+                    arc_components = ["H2O", "Prop", "H2O_Tank", "Prop_Tank", "Infra"]
                 else:
                     arc_components = []
 
@@ -61,14 +63,14 @@ def build_model(data, gurobi_params=None):
                     arc_components = ["PL", "Prop"]
 
                 elif v == "RT":
-                    arc_components = ["H2O", "Prop", "H2O_Tank", "Prop_Tank"]
+                    arc_components = ["H2O", "Prop", "H2O_Tank", "Prop_Tank","Infra"]
 
                 elif v == "hold":
                     if arc.tail == "LEO":
                         arc_components = ["PL"]
                     else:
                         arc_components = ["PL", "H2O", "Prop",
-                                        "H2O_Tank", "Prop_Tank"]
+                                        "H2O_Tank", "Prop_Tank","Infra"]
 
             for c in arc_components:
                 for t in arc.active_times:
@@ -92,7 +94,7 @@ def build_model(data, gurobi_params=None):
                 spacecraft_index.append((v, a, t))
     y = m.addVars(spacecraft_index, lb=0, vtype=GRB.INTEGER, name="y")
 
-    N_sc = m.addVars(["OTV", "RT"], lb=0, vtype=GRB.INTEGER, name="N_sc")
+    N_sc = m.addVars(["OTV", "RT"],range(T), lb=0, vtype=GRB.INTEGER, name="N_sc")
 
     #ISRU/storage variables
     E_SWE = ["Moon_SWE"]
@@ -102,15 +104,15 @@ def build_model(data, gurobi_params=None):
 
     DWE = m.addVars(E_Depot, vtype=GRB.BINARY, name="DWE") #DWE 설치 여부
     SWE = m.addVar(vtype=GRB.BINARY, name="SWE") #SWE 설치 여부
-    Storage_H2O = m.addVars(E_Depot, lb=0, name="Storage_H2O")
-    Storage_Prop = m.addVars(E_Depot, lb=0, name="Storage_Prop") #Storage 사이징
+    Storage_H2O = m.addVars(E_Depot, range(data.mission["mission_years"]), lb=0, name="Storage_H2O")
+    Storage_Prop = m.addVars(E_Depot, range(data.mission["mission_years"]), lb=0, name="Storage_Prop") #Storage 사이징
 
-    q = m.addVars(E, lb=0, name="q") #DWE, SWE 사이징
+    q = m.addVars(E,range(data.mission["mission_years"]), lb=0, name="q") #DWE, SWE 사이징
     q_operation = m.addVars(E,range(T), lb=0, name="q_operation")
 
     # Earth-supplied propellant can enter at any point in the full mission.
-    earth_prop = m.addVars(["LEO", "Moon"], range(T), lb=0, name="earth_prop")
-    first_Tank = m.addVars(["H2O_Tank", "Prop_Tank"], lb=0, name="first_tank")
+    earth_prop = m.addVars(["GTO", "Moon"], range(T), lb=0, name="earth_prop")
+    first_Tank = m.addVars(["H2O_Tank", "Prop_Tank"],range(data.mission["mission_years"]), lb=0, name="first_tank")
 
     '''-----------------------objective-----------------------'''
     # ------------------------------------------------------------
@@ -120,30 +122,30 @@ def build_model(data, gurobi_params=None):
     # One-time facility construction and delivery.
     obj_swe = (
         bc["SWE_fixed"] * SWE
-        + (bc["SWE_per_capacity"] + bc["transfer_cost"]["Moon"]) * q["Moon_SWE"]
+        + (bc["SWE_per_capacity"] + bc["transfer_cost"]["Moon"]) * q["Moon_SWE", 0]
     )
     obj_dwe = gp.quicksum(
         bc["DWE_fixed"] * DWE[p]
-        + (bc["DWE_per_capacity"] + bc["transfer_cost"][p]) * q[p]
+        + (bc["DWE_per_capacity"] + bc["transfer_cost"][p]) * q[p,0]
         for p in E_Depot
     )
 
     # Storage cost (both tanks charged manufacture + delivery to the node)
     obj_storage = gp.quicksum(
-        (bc["Storage_H2O_per_kg"]+bc["transfer_cost"][p]) * Storage_H2O[p]
-        + (bc["Storage_Prop_per_kg"]+bc["transfer_cost"][p]) * Storage_Prop[p]
+        (bc["Storage_H2O_per_kg"]+bc["transfer_cost"][p]) * Storage_H2O[p,0]
+        + (bc["Storage_Prop_per_kg"]+bc["transfer_cost"][p]) * Storage_Prop[p,0]
         for p in E_Depot
     )
 
     # Spacecraft manufacturing + deployment cost (first_Tank 유지)
     obj_spacecraft = (
-        bc["OTV_unit"] * N_sc["OTV"]
-        + bc["RT_unit"] * N_sc["RT"]
+        bc["OTV_unit"] * N_sc["OTV",0]
+        + bc["RT_unit"] * N_sc["RT",0]
         # deploy each vehicle to its initial node (OTV->LEO, RT->Moon)
-        + bc["transfer_cost"]["LEO"] * vehicles["OTV"]["dry_mass"] * N_sc["OTV"]
-        + bc["transfer_cost"]["Moon"] * vehicles["RT"]["dry_mass"] * N_sc["RT"]
-        + (bc["transfer_cost"]["Moon"] + bc["Storage_H2O_per_kg"]) * first_Tank["H2O_Tank"]
-        + (bc["transfer_cost"]["Moon"] + bc["Storage_Prop_per_kg"]) * first_Tank["Prop_Tank"]
+        + bc["transfer_cost"]["GTO"] * vehicles["OTV"]["dry_mass"] * N_sc["OTV",0]
+        + bc["transfer_cost"]["Moon"] * vehicles["RT"]["dry_mass"] * N_sc["RT",0]
+        + (bc["transfer_cost"]["Moon"] + bc["Storage_H2O_per_kg"]) * first_Tank["H2O_Tank",0]
+        + (bc["transfer_cost"]["Moon"] + bc["Storage_Prop_per_kg"]) * first_Tank["Prop_Tank",0]
     )
 
     # Full-mission ISRU maintenance (5% of plant mass per 360-day year).
@@ -160,7 +162,7 @@ def build_model(data, gurobi_params=None):
     # Every kilogram of Earth-supplied propellant is charged exactly once.
     obj_earth_prop = gp.quicksum(
         (bc["Ini_Prop_per_kg"] + bc["transfer_cost"][node]) * earth_prop[node, t]
-        for node in ["LEO", "Moon"] for t in range(T)
+        for node in ["GTO", "Moon"] for t in range(T)
     )
 
     obj = (
@@ -218,11 +220,11 @@ def build_model(data, gurobi_params=None):
                 )
 
                 rhs = gp.LinExpr(d_it.get((k, i, t), 0.0))
-                if k == "Prop" and i in ("LEO", "Moon"):
+                if k == "Prop" and i in ("GTO", "Moon"):
                     rhs += earth_prop[i, t]
                 #처음 탱크
                 if t == 0 and i == "Moon":
-                    rhs += first_Tank.get(k, 0.0)
+                    rhs += first_Tank.get((k,0),0)
                 
                 #SWE 생산물 (물 생산; 150% overhead -> Gkaravela 10.5 * 3/2.5)
                 if i == "Moon" and k =="H2O":
@@ -237,6 +239,34 @@ def build_model(data, gurobi_params=None):
                         rhs -= dwe_rate * q_operation[i, t]
                     elif k == "Prop":
                         rhs += PROP_PER_H2O * dwe_rate * q_operation[i, t]
+
+                # 인프라 페이로드 받음
+                if t%(data.mission["days_per_year"]//data.mission["days_per_step"]) == 0 and t != 0:
+                    if k == "H2O_Tank" and i == "Moon" :
+                        rhs += first_Tank[k, t_to_year(t, data)]
+                    elif k == "Prop_Tank" and i == "Moon" :
+                        rhs += first_Tank[k, t_to_year(t, data)]
+
+                    elif k == "Infra" : 
+                        if i == "Moon" :
+                            rhs -= (q["Moon_SWE", t_to_year(t, data)] - q["Moon_SWE", t_to_year(t, data)-1]
+                            + q[i, t_to_year(t, data)] - q[i, t_to_year(t, data)-1]
+                            + first_Tank[k, t_to_year(t, data)] 
+                            + first_Tank[k, t_to_year(t, data)]
+                            + Storage_H2O[i, t_to_year(t, data)] - Storage_H2O[i, t_to_year(t, data)-1]
+                            + Storage_Prop[i, t_to_year(t, data)] - Storage_Prop[i, t_to_year(t, data)-1]
+                            )
+                        elif i in E_Depot :
+                            rhs -= (
+                            + q[i, t_to_year(t, data)] - q[i, t_to_year(t, data)-1]
+                            + Storage_H2O[i, t_to_year(t, data)] - Storage_H2O[i, t_to_year(t, data)-1]
+                            + Storage_Prop[i, t_to_year(t, data)] - Storage_Prop[i, t_to_year(t, data)-1]
+                            )
+
+                # 인프라 페이로드 공급
+                if (t+6)%(data.mission["days_per_year"]//data.mission["days_per_step"]) == 0 :
+                    if k == "Infra" and i == "GTO":
+                        rhs += 100000 #대충 큰 수로 할지 요구되는 인프라 무게 총 합으로 할지 고민중
 
                 m.addConstr(outflow - inflow <= rhs, name=f"mass[{k},{i},{t}]")
 
@@ -271,7 +301,7 @@ def build_model(data, gurobi_params=None):
                 # (1) 전체 무게: 싣는 모든 것의 합 <= payload_cap * y + propellant_cap * y
                 total_terms = [
                     x[c, "RT", a, t]
-                    for c in ["H2O", "Prop", "H2O_Tank", "Prop_Tank"]
+                    for c in ["H2O", "Prop", "H2O_Tank", "Prop_Tank", "Infra"]
                     if (c, "RT", a, t) in x
                 ]
                 if total_terms:
@@ -295,7 +325,7 @@ def build_model(data, gurobi_params=None):
                 # 탱크와 물 자체가 차지하는 페이로드 H2O + H2O_Tank + Prop_Tank <= payload cap * y
                 total_terms = [
                     x[c, "RT", a, t]
-                    for c in ["H2O", "H2O_Tank", "Prop_Tank"]
+                    for c in ["H2O", "H2O_Tank", "Prop_Tank", "Infra"]
                     if (c, "RT", a, t) in x
                 ]
                 if total_terms:
@@ -324,15 +354,15 @@ def build_model(data, gurobi_params=None):
                 # depot/Moon: storage 사이징 변수로 상한
                 if node in E_Depot:
                     # H2O 저장 <= Storage_H2O[node]
-                    if ("H2O", "hold", a, t) in x and node in Storage_H2O:
+                    if ("H2O", "hold", a, t) in x and node in E_Depot:
                         m.addConstr(
-                            x["H2O", "hold", a, t] <= H2O_TANK_RATIO * Storage_H2O[node],
+                            x["H2O", "hold", a, t] <= H2O_TANK_RATIO * Storage_H2O[node, t_to_year(t, data)],
                             name=f"store_H2O_{node}_t{t}",
                         )
                     # Prop 저장 <= Storage_Prop[node]
-                    if ("Prop", "hold", a, t) in x and node in Storage_Prop:
+                    if ("Prop", "hold", a, t) in x and node in E_Depot:
                         m.addConstr(
-                            x["Prop", "hold", a, t] <= PROP_TANK_RATIO * Storage_Prop[node],
+                            x["Prop", "hold", a, t] <= PROP_TANK_RATIO * t_to_year(t, data),
                             name=f"store_Prop_{node}_t{t}",
                         )
 
@@ -340,13 +370,13 @@ def build_model(data, gurobi_params=None):
     #---------------------ISRU operation------------------------
     for e in E:
         for t in range(T):
-            m.addConstr(q_operation[e, t] <= q[e], name=f"prod_cap_{e}_{t}")
+            m.addConstr(q_operation[e, t] <= q[e, t_to_year(t, data)], name=f"prod_cap_{e}_{t}")
         # The final point has no outgoing interval in which production can be used.
         m.addConstr(q_operation[e, T - 1] == 0, name=f"prod_terminal_{e}")
 
     #---------------------vehicle flow conservation------------------------
     # ---------------- 초기 우주선 배치 노드 ----------------
-    INIT_NODE = {"OTV": "LEO", "RT": "Moon"}
+    INIT_NODE = {"OTV": "GTO", "RT": "Moon"}
 
     # ---------------- 우주선 대수 보존 ----------------
     for v in ["OTV", "RT"]:
@@ -366,8 +396,10 @@ def build_model(data, gurobi_params=None):
                 )
                 # 초기 배치: t=0에 INIT_NODE[v]에 N_sc[v]대
                 if t == 0 and i == INIT_NODE[v]:
-                    init = N_sc[v]
-                else:
+                    init = N_sc[v, t]
+                elif t%(data.mission["days_per_year"]//data.mission["days_per_step"]) == 0 and i == INIT_NODE[v]:
+                    init = N_sc[v, t_to_year(t, data))]
+                else : 
                     init = 0
 
                 m.addConstr(arrive + init >= depart,
@@ -389,11 +421,11 @@ def build_model(data, gurobi_params=None):
 
     # SWE: q["Moon_SWE"] <= M * SWE
     for e in E_SWE:
-        m.addConstr(q[e] <= BIG_M * SWE, name=f"install_SWE_{e}")
+        m.addConstr(q[e, 0] <= BIG_M * SWE, name=f"install_SWE_{e}")
 
     # DWE: q[node] <= M * DWE[node]
     for e in E_Depot:
-        m.addConstr(q[e] <= BIG_M * DWE[e], name=f"install_DWE_{e}")
+        m.addConstr(q[e, 0] <= BIG_M * DWE[e], name=f"install_DWE_{e}")
 
     variables = {
         "x": x,

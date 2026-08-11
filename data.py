@@ -132,7 +132,7 @@ def get_data(profile_path):
     profile = _load_demand_profile(profile_path)
 
     nodes = ["LEO", "GEO", "GTO", "EML1", "NRHO", "LLO", "Moon"]
-    commodities = ["PL", "H2O", "Prop", "H2O_Tank", "Prop_Tank"]
+    commodities = ["PL", "H2O", "Prop", "H2O_Tank", "Prop_Tank", "Infra"]
     depot_node = ["Moon", "GEO", "GTO", "EML1", "NRHO", "LLO"]
 
     mission_years = int(profile["mission_years"])

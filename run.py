@@ -14,7 +14,7 @@ RESULT_DIR = Path("results")
 SOLUTION_PATH = RESULT_DIR / "latest_solution.json"
 DEMAND_PROFILE_PATH = Path("inputs") / "demand_5yr_50tpy.json"
 GUROBI_PARAMS = {
-    "TimeLimit": 2 * 3600,
+    "TimeLimit": 6 * 3600,
     "MIPGap": 0.025,
     "MIPFocus": 1,
     "Cuts": 2,
@@ -155,12 +155,12 @@ def build_solution(data, model, variables):
 
     earth_prop_by_node = {
         node: sum(variables["earth_prop"][node, time].X for time in range(data.T))
-        for node in ["LEO", "Moon"]
+        for node in ["GTO", "Moon"]
     }
     earth_prop_by_year = {
         str(year): sum(
             variables["earth_prop"][node, time].X
-            for node in ["LEO", "Moon"]
+            for node in ["GTO", "Moon"]
             for time in range(data.T)
             if _year_for_step(data.mission, time) == year
         )
@@ -253,7 +253,7 @@ def build_cost_breakdown(data, variables):
     earth_prop = sum(
         (bc["Ini_Prop_per_kg"] + transfer[node])
         * variables["earth_prop"][node, time].X
-        for node in ["LEO", "Moon"]
+        for node in ["GTO", "Moon"]
         for time in range(data.T)
     )
 
