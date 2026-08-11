@@ -5,8 +5,21 @@ from build_Q import build_Q
 from build_dit import build_dit
 from build_cost import BUILD_COST as bc
 
+
+INFRA_RESUPPLY_CAP_KG = 100_000.0
+
+
+def steps_per_year(data):
+    days_per_year = data.mission["days_per_year"]
+    days_per_step = data.mission["days_per_step"]
+    if days_per_year % days_per_step != 0:
+        raise ValueError("days_per_year must be divisible by days_per_step")
+    return days_per_year // days_per_step
+
+
 def t_to_year(t, data):
-    return t//(data.mission["days_per_year"]//data.mission["days_per_step"])
+    year = t // steps_per_year(data)
+    return min(year, data.mission["mission_years"] - 1)
 
 def build_model(data, gurobi_params=None):
     nodes = data.nodes
@@ -20,6 +33,21 @@ def build_model(data, gurobi_params=None):
     A = range(len(arcs))
 
     mission = data.mission
+    mission_years = mission["mission_years"]
+    final_year = mission_years - 1
+    year_indices = range(mission_years)
+    steps_in_year = steps_per_year(data)
+    installation_step_to_year = {
+        year * steps_in_year: year for year in range(1, mission_years)
+    }
+    # One GTO resupply opportunity half a year before each post-initial
+    # installation boundary. Year 0 facilities are intentionally predeployed.
+    resupply_lead_steps = steps_in_year // 2
+    infra_supply_time_by_year = {
+        year: year * steps_in_year - resupply_lead_steps
+        for year in range(1, mission_years)
+    }
+    infra_supply_times = tuple(infra_supply_time_by_year.values())
 
     out_arcs = {i: [a for a in A if arcs[a].tail == i] for i in nodes}
     in_arcs = {i: [a for a in A if arcs[a].head == i] for i in nodes}
@@ -94,7 +122,10 @@ def build_model(data, gurobi_params=None):
                 spacecraft_index.append((v, a, t))
     y = m.addVars(spacecraft_index, lb=0, vtype=GRB.INTEGER, name="y")
 
-    N_sc = m.addVars(["OTV", "RT"],range(T), lb=0, vtype=GRB.INTEGER, name="N_sc")
+    # New vehicles deployed at the start of each mission year.
+    N_sc = m.addVars(
+        ["OTV", "RT"], year_indices, lb=0, vtype=GRB.INTEGER, name="N_sc"
+    )
 
     #ISRU/storage variables
     E_SWE = ["Moon_SWE"]
@@ -104,59 +135,91 @@ def build_model(data, gurobi_params=None):
 
     DWE = m.addVars(E_Depot, vtype=GRB.BINARY, name="DWE") #DWE 설치 여부
     SWE = m.addVar(vtype=GRB.BINARY, name="SWE") #SWE 설치 여부
-    Storage_H2O = m.addVars(E_Depot, range(data.mission["mission_years"]), lb=0, name="Storage_H2O")
-    Storage_Prop = m.addVars(E_Depot, range(data.mission["mission_years"]), lb=0, name="Storage_Prop") #Storage 사이징
+    Storage_H2O = m.addVars(E_Depot, year_indices, lb=0, name="Storage_H2O")
+    Storage_Prop = m.addVars(E_Depot, year_indices, lb=0, name="Storage_Prop") #Storage 사이징
 
-    q = m.addVars(E,range(data.mission["mission_years"]), lb=0, name="q") #DWE, SWE 사이징
+    q = m.addVars(E, year_indices, lb=0, name="q") #DWE, SWE 사이징
     q_operation = m.addVars(E,range(T), lb=0, name="q_operation")
 
     # Earth-supplied propellant can enter at any point in the full mission.
     earth_prop = m.addVars(["GTO", "Moon"], range(T), lb=0, name="earth_prop")
-    first_Tank = m.addVars(["H2O_Tank", "Prop_Tank"],range(data.mission["mission_years"]), lb=0, name="first_tank")
+    first_Tank = m.addVars(
+        ["H2O_Tank", "Prop_Tank"], year_indices, lb=0, name="first_tank"
+    )
+    # Actual infrastructure mass launched from Earth into GTO. The upper bound
+    # preserves the previous 100 t per-window resupply limit while making the
+    # used quantity explicit and chargeable.
+    infra_supply = m.addVars(
+        infra_supply_times,
+        lb=0,
+        ub=INFRA_RESUPPLY_CAP_KG,
+        name="infra_supply_GTO",
+    )
 
     '''-----------------------objective-----------------------'''
     # ------------------------------------------------------------
     # Facility build cost
     # ------------------------------------------------------------
 
-    # One-time facility construction and delivery.
+    # Manufacturing is charged once on the final installed stock. Initial
+    # facilities are predeployed, so only their destination delivery is added.
     obj_swe = (
         bc["SWE_fixed"] * SWE
-        + (bc["SWE_per_capacity"] + bc["transfer_cost"]["Moon"]) * q["Moon_SWE", 0]
+        + bc["SWE_per_capacity"] * q["Moon_SWE", final_year]
+        + bc["transfer_cost"]["Moon"] * q["Moon_SWE", 0]
     )
     obj_dwe = gp.quicksum(
         bc["DWE_fixed"] * DWE[p]
-        + (bc["DWE_per_capacity"] + bc["transfer_cost"][p]) * q[p,0]
+        + bc["DWE_per_capacity"] * q[p, final_year]
+        + bc["transfer_cost"][p] * q[p, 0]
         for p in E_Depot
     )
 
-    # Storage cost (both tanks charged manufacture + delivery to the node)
+    # Storage follows the same rule: final stock is manufactured once, while
+    # only the initial stock receives the direct-to-destination delivery charge.
     obj_storage = gp.quicksum(
-        (bc["Storage_H2O_per_kg"]+bc["transfer_cost"][p]) * Storage_H2O[p,0]
-        + (bc["Storage_Prop_per_kg"]+bc["transfer_cost"][p]) * Storage_Prop[p,0]
+        bc["Storage_H2O_per_kg"] * Storage_H2O[p, final_year]
+        + bc["transfer_cost"][p] * Storage_H2O[p, 0]
+        + bc["Storage_Prop_per_kg"] * Storage_Prop[p, final_year]
+        + bc["transfer_cost"][p] * Storage_Prop[p, 0]
         for p in E_Depot
     )
 
-    # Spacecraft manufacturing + deployment cost (first_Tank 유지)
-    obj_spacecraft = (
-        bc["OTV_unit"] * N_sc["OTV",0]
-        + bc["RT_unit"] * N_sc["RT",0]
-        # deploy each vehicle to its initial node (OTV->LEO, RT->Moon)
-        + bc["transfer_cost"]["GTO"] * vehicles["OTV"]["dry_mass"] * N_sc["OTV",0]
-        + bc["transfer_cost"]["Moon"] * vehicles["RT"]["dry_mass"] * N_sc["RT",0]
-        + (bc["transfer_cost"]["Moon"] + bc["Storage_H2O_per_kg"]) * first_Tank["H2O_Tank",0]
-        + (bc["transfer_cost"]["Moon"] + bc["Storage_Prop_per_kg"]) * first_Tank["Prop_Tank",0]
+    # Post-initial additions enter at GTO. Their manufacturing cost is already
+    # included in the final-stock terms above, so only GTO delivery is added here.
+    obj_infra_to_gto = bc["transfer_cost"]["GTO"] * gp.quicksum(
+        infra_supply[t] for t in infra_supply_times
     )
 
-    # Full-mission ISRU maintenance (5% of plant mass per 360-day year).
-    mission_duration_years = (
-        mission["mission_steps"] * mission["days_per_step"] / mission["days_per_year"]
+    # Every annual vehicle/tank addition pays manufacturing and deployment;
+    # otherwise later infrastructure transport could use free RT additions.
+    obj_spacecraft = gp.quicksum(
+        bc["OTV_unit"] * N_sc["OTV", year]
+        + bc["RT_unit"] * N_sc["RT", year]
+        + bc["transfer_cost"]["GTO"]
+        * vehicles["OTV"]["dry_mass"]
+        * N_sc["OTV", year]
+        + bc["transfer_cost"]["Moon"]
+        * vehicles["RT"]["dry_mass"]
+        * N_sc["RT", year]
+        + (bc["transfer_cost"]["Moon"] + bc["Storage_H2O_per_kg"])
+        * first_Tank["H2O_Tank", year]
+        + (bc["transfer_cost"]["Moon"] + bc["Storage_Prop_per_kg"])
+        * first_Tank["Prop_Tank", year]
+        for year in year_indices
     )
-    maint_factor = bc["ISRU_maint_frac_per_yr"] * mission_duration_years
-    obj_maint = maint_factor * (
-        (bc["ISRU_spares_cost_per_kg"] + bc["transfer_cost"]["Moon"]) * q["Moon_SWE"]
-        + gp.quicksum((bc["ISRU_spares_cost_per_kg"] + bc["transfer_cost"][p]) * q[p]
-                      for p in E_Depot)
+
+    # Maintenance is charged on the stock that actually exists in each year.
+    # A facility installed in year y therefore pays maintenance only from y on.
+    obj_maint = bc["ISRU_maint_frac_per_yr"] * gp.quicksum(
+        (bc["ISRU_spares_cost_per_kg"] + bc["transfer_cost"]["Moon"])
+        * q["Moon_SWE", year]
+        + gp.quicksum(
+            (bc["ISRU_spares_cost_per_kg"] + bc["transfer_cost"][p])
+            * q[p, year]
+            for p in E_Depot
+        )
+        for year in year_indices
     )
 
     # Every kilogram of Earth-supplied propellant is charged exactly once.
@@ -165,14 +228,39 @@ def build_model(data, gurobi_params=None):
         for node in ["GTO", "Moon"] for t in range(T)
     )
 
-    obj = (
-        obj_swe + obj_dwe + obj_storage + obj_spacecraft
-        + obj_maint + obj_earth_prop
-    )
+    cost_terms = {
+        "SWE": obj_swe,
+        "DWE": obj_dwe,
+        "storage": obj_storage,
+        "infrastructure_to_GTO": obj_infra_to_gto,
+        "spacecraft": obj_spacecraft,
+        "maintenance": obj_maint,
+        "earth_prop": obj_earth_prop,
+    }
+    obj = gp.quicksum(cost_terms.values())
 
     m.setObjective(obj, GRB.MINIMIZE)
 
     '''-----------------------Constraints-----------------------'''
+
+    # The GTO payload in each resupply window is exactly the dry mass installed
+    # at the following annual boundary. This ties the generic Infra flow back to
+    # its asset-specific manufacturing quantities and makes the 100 t cap real.
+    for year, supply_time in infra_supply_time_by_year.items():
+        previous_year = year - 1
+        installed_mass = (
+            q["Moon_SWE", year] - q["Moon_SWE", previous_year]
+            + gp.quicksum(
+                q[p, year] - q[p, previous_year]
+                + Storage_H2O[p, year] - Storage_H2O[p, previous_year]
+                + Storage_Prop[p, year] - Storage_Prop[p, previous_year]
+                for p in E_Depot
+            )
+        )
+        m.addConstr(
+            infra_supply[supply_time] == installed_mass,
+            name=f"infra_supply_matches_additions_{year}",
+        )
    
     #----------------------------xm value----------------------------
 
@@ -240,33 +328,35 @@ def build_model(data, gurobi_params=None):
                     elif k == "Prop":
                         rhs += PROP_PER_H2O * dwe_rate * q_operation[i, t]
 
-                # 인프라 페이로드 받음
-                if t%(data.mission["days_per_year"]//data.mission["days_per_step"]) == 0 and t != 0:
+                # Annual additions. Year 0 assets are intentionally already in
+                # place, so only years 1..Y-1 consume transported infrastructure.
+                installation_year = installation_step_to_year.get(t)
+                if installation_year is not None:
                     if k == "H2O_Tank" and i == "Moon" :
-                        rhs += first_Tank[k, t_to_year(t, data)]
+                        rhs += first_Tank[k, installation_year]
                     elif k == "Prop_Tank" and i == "Moon" :
-                        rhs += first_Tank[k, t_to_year(t, data)]
+                        rhs += first_Tank[k, installation_year]
 
-                    elif k == "Infra" : 
-                        if i == "Moon" :
-                            rhs -= (q["Moon_SWE", t_to_year(t, data)] - q["Moon_SWE", t_to_year(t, data)-1]
-                            + q[i, t_to_year(t, data)] - q[i, t_to_year(t, data)-1]
-                            + first_Tank[k, t_to_year(t, data)] 
-                            + first_Tank[k, t_to_year(t, data)]
-                            + Storage_H2O[i, t_to_year(t, data)] - Storage_H2O[i, t_to_year(t, data)-1]
-                            + Storage_Prop[i, t_to_year(t, data)] - Storage_Prop[i, t_to_year(t, data)-1]
+                    elif k == "Infra" and i in E_Depot:
+                        previous_year = installation_year - 1
+                        installed_mass = (
+                            q[i, installation_year] - q[i, previous_year]
+                            + Storage_H2O[i, installation_year]
+                            - Storage_H2O[i, previous_year]
+                            + Storage_Prop[i, installation_year]
+                            - Storage_Prop[i, previous_year]
+                        )
+                        if i == "Moon":
+                            installed_mass += (
+                                q["Moon_SWE", installation_year]
+                                - q["Moon_SWE", previous_year]
                             )
-                        elif i in E_Depot :
-                            rhs -= (
-                            + q[i, t_to_year(t, data)] - q[i, t_to_year(t, data)-1]
-                            + Storage_H2O[i, t_to_year(t, data)] - Storage_H2O[i, t_to_year(t, data)-1]
-                            + Storage_Prop[i, t_to_year(t, data)] - Storage_Prop[i, t_to_year(t, data)-1]
-                            )
+                        rhs -= installed_mass
 
-                # 인프라 페이로드 공급
-                if (t+6)%(data.mission["days_per_year"]//data.mission["days_per_step"]) == 0 :
-                    if k == "Infra" and i == "GTO":
-                        rhs += 100000 #대충 큰 수로 할지 요구되는 인프라 무게 총 합으로 할지 고민중
+                # Infrastructure is launched from Earth into GTO and then must
+                # use the RT network to reach its installation node.
+                if k == "Infra" and i == "GTO" and t in infra_supply:
+                    rhs += infra_supply[t]
 
                 m.addConstr(outflow - inflow <= rhs, name=f"mass[{k},{i},{t}]")
 
@@ -362,14 +452,15 @@ def build_model(data, gurobi_params=None):
                     # Prop 저장 <= Storage_Prop[node]
                     if ("Prop", "hold", a, t) in x and node in E_Depot:
                         m.addConstr(
-                            x["Prop", "hold", a, t] <= PROP_TANK_RATIO * t_to_year(t, data),
+                            x["Prop", "hold", a, t]
+                            <= PROP_TANK_RATIO * Storage_Prop[node, t_to_year(t, data)],
                             name=f"store_Prop_{node}_t{t}",
                         )
 
 
     #---------------------ISRU operation------------------------
     for e in E:
-        for t in range(T):
+        for t in range(T - 1):
             m.addConstr(q_operation[e, t] <= q[e, t_to_year(t, data)], name=f"prod_cap_{e}_{t}")
         # The final point has no outgoing interval in which production can be used.
         m.addConstr(q_operation[e, T - 1] == 0, name=f"prod_terminal_{e}")
@@ -381,7 +472,8 @@ def build_model(data, gurobi_params=None):
     # ---------------- 우주선 대수 보존 ----------------
     for v in ["OTV", "RT"]:
         for i in nodes:
-            for t in range(T):
+            # At the terminal point vehicles may leave the modeled horizon.
+            for t in range(T - 1):
                 # i로 도착: in_arc를 통해 (출발시점 + tau == t)인 우주선
                 arrive = gp.quicksum(
                     y[v, a, t - arcs[a].tau]
@@ -396,13 +488,13 @@ def build_model(data, gurobi_params=None):
                 )
                 # 초기 배치: t=0에 INIT_NODE[v]에 N_sc[v]대
                 if t == 0 and i == INIT_NODE[v]:
-                    init = N_sc[v, t]
-                elif t%(data.mission["days_per_year"]//data.mission["days_per_step"]) == 0 and i == INIT_NODE[v]:
-                    init = N_sc[v, t_to_year(t, data))]
+                    init = N_sc[v, 0]
+                elif t in installation_step_to_year and i == INIT_NODE[v]:
+                    init = N_sc[v, installation_step_to_year[t]]
                 else : 
                     init = 0
 
-                m.addConstr(arrive + init >= depart,
+                m.addConstr(arrive + init == depart,
                             name=f"veh_cons_{v}_{i}_{t}")
 
      #------------------------q<=My------------------------
@@ -419,13 +511,39 @@ def build_model(data, gurobi_params=None):
     # lunar climb-out overhead), water:propellant ~ 1:1.
     BIG_M = max(30000.0, 40.0 * total_pl_demand / (swe_rate * op_days))
 
-    # SWE: q["Moon_SWE"] <= M * SWE
-    for e in E_SWE:
-        m.addConstr(q[e, 0] <= BIG_M * SWE, name=f"install_SWE_{e}")
-
-    # DWE: q[node] <= M * DWE[node]
+    # q and storage are installed stocks. Nondecreasing constraints make their
+    # annual differences valid nonnegative infrastructure additions.
+    for e in E:
+        for year in range(1, mission_years):
+            m.addConstr(
+                q[e, year] >= q[e, year - 1],
+                name=f"facility_stock_nondec_{e}_{year}",
+            )
     for e in E_Depot:
-        m.addConstr(q[e, 0] <= BIG_M * DWE[e], name=f"install_DWE_{e}")
+        for year in range(1, mission_years):
+            m.addConstr(
+                Storage_H2O[e, year] >= Storage_H2O[e, year - 1],
+                name=f"H2O_storage_stock_nondec_{e}_{year}",
+            )
+            m.addConstr(
+                Storage_Prop[e, year] >= Storage_Prop[e, year - 1],
+                name=f"Prop_storage_stock_nondec_{e}_{year}",
+            )
+
+    # Link every year's installed stock to the one-time site decision.
+    for e in E_SWE:
+        for year in year_indices:
+            m.addConstr(
+                q[e, year] <= BIG_M * SWE,
+                name=f"install_SWE_{e}_{year}",
+            )
+
+    for e in E_Depot:
+        for year in year_indices:
+            m.addConstr(
+                q[e, year] <= BIG_M * DWE[e],
+                name=f"install_DWE_{e}_{year}",
+            )
 
     variables = {
         "x": x,
@@ -440,6 +558,8 @@ def build_model(data, gurobi_params=None):
         "q_operation": q_operation,
         "earth_prop": earth_prop,
         "first_Tank": first_Tank,
+        "infra_supply": infra_supply,
+        "cost_terms": cost_terms,
     }
     return m, variables
 

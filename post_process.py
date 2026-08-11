@@ -25,6 +25,7 @@ COST_COLORS = {
     "SWE": "#4C78A8",
     "DWE": "#F58518",
     "storage": "#54A24B",
+    "infrastructure_to_GTO": "#BAB0AC",
     "spacecraft": "#B279A2",
     "maintenance": "#E45756",
     "earth_prop": "#72B7B2",
@@ -167,15 +168,17 @@ def plot_flow_over_time(solution, plot_dir):
             size = 140 + 300 * event["mass_kg"] / max_mass
             ax.scatter(event["demand_step"], y["GEO"], marker="*", s=size, color="crimson",
                        edgecolor="black", linewidth=0.6, zorder=6)
-    if "LEO" in y:
+    if "GTO" in y:
         for event in events:
             size = 140 + 300 * event["mass_kg"] / max_mass
-            ax.scatter(event["supply_step"], y["LEO"], marker="*", s=size, color="gold",
+            ax.scatter(event["supply_step"], y["GTO"], marker="*", s=size, color="gold",
                        edgecolor="black", linewidth=0.6, zorder=6)
 
     ax.set_yticks([y[node] for node in nodes])
     ax.set_yticklabels(nodes)
-    ax.set_xlabel("mission year (time step = 10 days)")
+    ax.set_xlabel(
+        f"mission year (time step = {mis['days_per_step']} days)"
+    )
     ax.set_ylabel("node")
     ax.set_title("Commodity flow over time", pad=36)
 
@@ -184,7 +187,7 @@ def plot_flow_over_time(solution, plot_dir):
                for c in cats_present]
     handles += [
         Line2D([0], [0], marker="*", color="w", markerfacecolor="gold",
-               markeredgecolor="black", markersize=15, label="PL supply @LEO"),
+               markeredgecolor="black", markersize=15, label="PL supply @GTO"),
         Line2D([0], [0], marker="*", color="w", markerfacecolor="crimson",
                markeredgecolor="black", markersize=15, label="PL demand @GEO"),
     ]
@@ -322,6 +325,7 @@ def plot_cost_share(solution, plot_dir):
         "SWE": breakdown.get("SWE", 0.0),
         "DWE": breakdown.get("DWE", 0.0),
         "storage": breakdown.get("storage", 0.0),
+        "infrastructure_to_GTO": breakdown.get("infrastructure_to_GTO", 0.0),
         "spacecraft": breakdown.get("spacecraft", 0.0),
         "maintenance": breakdown.get("maintenance", 0.0),
         "earth_prop": breakdown.get("earth_prop", 0.0),
@@ -479,7 +483,9 @@ def plot_production(solution, plot_dir):
     year_ticks = [year * steps_per_year for year in range(mission["mission_years"] + 1)]
     ax.set_xticks(year_ticks)
     ax.set_xticklabels([str(year) for year in range(mission["mission_years"] + 1)])
-    ax.set_xlabel("mission year (time step = 10 days)")
+    ax.set_xlabel(
+        f"mission year (time step = {mission['days_per_step']} days)"
+    )
     ax.set_ylabel("operated plant mass [kg]")
     ax.legend(fontsize=8, ncol=min(4, len(facilities)))
     ax.grid(color="0.92")

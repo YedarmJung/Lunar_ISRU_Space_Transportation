@@ -5,13 +5,16 @@
 # tagged in the comments.
 #
 # Unit conventions assumed by model.py:
-#   - q["Moon_SWE"], q[depot]  : ISRU *structure mass* [kg]
-#   - Storage_H2O, Storage_Prop: *tank mass* [kg]  (tank ratios live in model.py:
-#                                40 kg H2O/kg tank, 1.478 kg prop/kg tank)
+#   - q[facility, year]         : cumulative ISRU *structure mass* [kg]
+#   - Storage_*[node, year]     : cumulative *tank mass* [kg] (tank ratios live
+#                                in model.py: 40 kg H2O/kg tank and 1.478 kg
+#                                propellant/kg tank)
 #   - first_prop, first_Tank    : propellant / tank *mass* [kg]
 #
 # transfer_cost[node] approximates the un-modeled cost of *delivering* 1 kg of
-# hardware/propellant from Earth to that node.  It is estimated as
+# hardware/propellant from Earth to that node. Initial infrastructure delivery
+# uses its destination value; later RT-carried infrastructure uses the GTO value,
+# because GTO-to-destination transport is endogenous in model.py. It is estimated as
 #       transfer_cost[node] = launch_to_LEO * exp(dV_LEO->node / (Isp*g0))
 # i.e. the $5,000/kg launch cost times the propellant mass ratio needed to push
 # 1 kg from LEO to the node (Isp = 420 s, g0 = 9.80665e-3 km/s^2, so

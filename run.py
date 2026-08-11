@@ -4,7 +4,6 @@ from pathlib import Path
 
 from gurobipy import GRB
 
-from build_cost import BUILD_COST as bc
 from data import get_data
 from model import build_and_solve
 from post_process import generate_plots
@@ -120,31 +119,74 @@ def build_solution(data, model, variables):
             }
         )
 
-    fleet = {name: int(round(gvar.X)) for name, gvar in variables["N_sc"].items()}
+    mission_years = data.mission["mission_years"]
+    years = range(mission_years)
+    final_year = mission_years - 1
+
+    fleet_by_year = {
+        str(year + 1): {
+            name: int(round(variables["N_sc"][name, year].X))
+            for name in data.vehicles
+        }
+        for year in years
+    }
+    fleet = {
+        name: sum(fleet_by_year[str(year + 1)][name] for year in years)
+        for name in data.vehicles
+    }
+
+    def stock_by_year(stock, name):
+        return {
+            str(year + 1): stock[name, year].X
+            for year in years
+        }
+
+    def additions_by_year(stock, name):
+        return {
+            str(year + 1): (
+                stock[name, year].X
+                if year == 0
+                else stock[name, year].X - stock[name, year - 1].X
+            )
+            for year in years
+        }
+
     facilities = {
         "SWE": {
             "node": "Moon",
-            "installed": variables["SWE"].X > 0.5,
-            "q": variables["q"]["Moon_SWE"].X,
+            "installed": variables["q"]["Moon_SWE", final_year].X > TOL,
+            "q": variables["q"]["Moon_SWE", final_year].X,
+            "capacity_by_year": stock_by_year(variables["q"], "Moon_SWE"),
+            "additions_by_year": additions_by_year(variables["q"], "Moon_SWE"),
         },
         "DWE": {
             node: {
-                "installed": variables["DWE"][node].X > 0.5,
-                "q": variables["q"][node].X,
+                "installed": variables["q"][node, final_year].X > TOL,
+                "q": variables["q"][node, final_year].X,
+                "capacity_by_year": stock_by_year(variables["q"], node),
+                "additions_by_year": additions_by_year(variables["q"], node),
             }
             for node in data.depot_node
-            if variables["q"][node].X > TOL or variables["DWE"][node].X > 0.5
+            if variables["q"][node, final_year].X > TOL
         },
     }
     storage = {
         node: {
-            "H2O": variables["Storage_H2O"][node].X,
-            "Prop": variables["Storage_Prop"][node].X,
+            "H2O": variables["Storage_H2O"][node, final_year].X,
+            "Prop": variables["Storage_Prop"][node, final_year].X,
+            "H2O_by_year": stock_by_year(variables["Storage_H2O"], node),
+            "Prop_by_year": stock_by_year(variables["Storage_Prop"], node),
+            "H2O_additions_by_year": additions_by_year(
+                variables["Storage_H2O"], node
+            ),
+            "Prop_additions_by_year": additions_by_year(
+                variables["Storage_Prop"], node
+            ),
         }
         for node in data.depot_node
         if (
-            variables["Storage_H2O"][node].X > TOL
-            or variables["Storage_Prop"][node].X > TOL
+            variables["Storage_H2O"][node, final_year].X > TOL
+            or variables["Storage_Prop"][node, final_year].X > TOL
         )
     }
     production = [
@@ -171,7 +213,46 @@ def build_solution(data, model, variables):
         "by_node": earth_prop_by_node,
         "by_year": earth_prop_by_year,
     }
-    first_tank = {name: gvar.X for name, gvar in variables["first_Tank"].items()}
+    first_tank_by_year = {
+        str(year + 1): {
+            tank: variables["first_Tank"][tank, year].X
+            for tank in ["H2O_Tank", "Prop_Tank"]
+        }
+        for year in years
+    }
+    first_tank = {
+        "total": {
+            tank: sum(
+                variables["first_Tank"][tank, year].X for year in years
+            )
+            for tank in ["H2O_Tank", "Prop_Tank"]
+        },
+        "by_year": first_tank_by_year,
+    }
+    infra_supply_by_time = {
+        str(time): gvar.X
+        for time, gvar in variables["infra_supply"].items()
+    }
+    infra_supply_by_year = {
+        str(year): sum(
+            gvar.X
+            for time, gvar in variables["infra_supply"].items()
+            if _year_for_step(data.mission, time) == year
+        )
+        for year in range(1, mission_years + 1)
+    }
+    steps_in_year = data.mission["days_per_year"] // data.mission["days_per_step"]
+    resupply_lead_steps = steps_in_year // 2
+    infra_supply_by_installation_year = {
+        str((time + resupply_lead_steps) // steps_in_year + 1): gvar.X
+        for time, gvar in variables["infra_supply"].items()
+    }
+    infrastructure_resupply = {
+        "total_to_GTO": sum(gvar.X for gvar in variables["infra_supply"].values()),
+        "by_time": infra_supply_by_time,
+        "by_year": infra_supply_by_year,
+        "by_installation_year": infra_supply_by_installation_year,
+    }
     breakdown, lifecycle = build_cost_breakdown(data, variables)
 
     return {
@@ -197,85 +278,44 @@ def build_solution(data, model, variables):
         "flows": flows,
         "trips": trips,
         "fleet": fleet,
+        "fleet_additions_by_year": fleet_by_year,
         "facilities": facilities,
         "storage": storage,
         "production": production,
         "earth_prop": earth_prop,
         "first_tank": first_tank,
+        "infrastructure_resupply": infrastructure_resupply,
         "cost_breakdown": breakdown,
         "lifecycle": lifecycle,
     }
 
 
 def build_cost_breakdown(data, variables):
-    transfer = bc["transfer_cost"]
-    vehicles = data.vehicles
     mission = data.mission
-
-    swe = bc["SWE_fixed"] * variables["SWE"].X + (
-        bc["SWE_per_capacity"] + transfer["Moon"]
-    ) * variables["q"]["Moon_SWE"].X
-    dwe = sum(
-        bc["DWE_fixed"] * variables["DWE"][node].X
-        + (bc["DWE_per_capacity"] + transfer[node]) * variables["q"][node].X
-        for node in data.depot_node
-    )
-    storage = sum(
-        (bc["Storage_H2O_per_kg"] + transfer[node])
-        * variables["Storage_H2O"][node].X
-        + (bc["Storage_Prop_per_kg"] + transfer[node])
-        * variables["Storage_Prop"][node].X
-        for node in data.depot_node
-    )
-    spacecraft = (
-        bc["OTV_unit"] * variables["N_sc"]["OTV"].X
-        + bc["RT_unit"] * variables["N_sc"]["RT"].X
-        + transfer["LEO"] * vehicles["OTV"]["dry_mass"] * variables["N_sc"]["OTV"].X
-        + transfer["Moon"] * vehicles["RT"]["dry_mass"] * variables["N_sc"]["RT"].X
-        + (transfer["Moon"] + bc["Storage_H2O_per_kg"])
-        * variables["first_Tank"]["H2O_Tank"].X
-        + (transfer["Moon"] + bc["Storage_Prop_per_kg"])
-        * variables["first_Tank"]["Prop_Tank"].X
-    )
-
-    mission_duration_years = (
-        mission["mission_steps"] * mission["days_per_step"] / mission["days_per_year"]
-    )
-    maintenance = bc["ISRU_maint_frac_per_yr"] * mission_duration_years * (
-        (bc["ISRU_spares_cost_per_kg"] + transfer["Moon"])
-        * variables["q"]["Moon_SWE"].X
-        + sum(
-            (bc["ISRU_spares_cost_per_kg"] + transfer[node])
-            * variables["q"][node].X
-            for node in data.depot_node
-        )
-    )
-    earth_prop = sum(
-        (bc["Ini_Prop_per_kg"] + transfer[node])
-        * variables["earth_prop"][node, time].X
-        for node in ["GTO", "Moon"]
-        for time in range(data.T)
-    )
-
-    capex = swe + dwe + storage + spacecraft
-    total = capex + maintenance + earth_prop
-    total_payload = mission["total_payload_kg"]
-    cost_per_kg = total / total_payload if total_payload > 0 else float("nan")
     breakdown = {
-        "SWE": swe,
-        "DWE": dwe,
-        "storage": storage,
-        "spacecraft": spacecraft,
-        "maintenance": maintenance,
-        "earth_prop": earth_prop,
-        "total": total,
+        name: float(expression.getValue())
+        for name, expression in variables["cost_terms"].items()
     }
+    total = sum(breakdown.values())
+    breakdown["total"] = total
+
+    operating_keys = {"maintenance", "earth_prop"}
+    capex = sum(
+        value
+        for name, value in breakdown.items()
+        if name not in operating_keys and name != "total"
+    )
+    maintenance = breakdown["maintenance"]
+    earth_prop = breakdown["earth_prop"]
+    total_payload = mission["total_payload_kg"]
+    cost_per_kg = total / total_payload if total_payload > 0 else None
     lifecycle = {
         "mission_years": mission["mission_years"],
         "mission_days": mission["mission_days"],
         "total_payload_kg": total_payload,
         "demand_by_year_kg": mission["demand_by_year_kg"],
         "capex_total": capex,
+        "infrastructure_to_GTO_total": breakdown["infrastructure_to_GTO"],
         "maintenance_total": maintenance,
         "earth_prop_total": earth_prop,
         "total": total,
@@ -322,6 +362,12 @@ def print_summary(solution):
     for node, info in solution["storage"].items():
         print(f"  {node}: H2O tank={info['H2O']:,.1f} kg, Prop tank={info['Prop']:,.1f} kg")
 
+    infra = solution["infrastructure_resupply"]
+    print(f"\nPost-initial infrastructure launched to GTO: {infra['total_to_GTO']:,.1f} kg")
+    for year, value in infra["by_installation_year"].items():
+        if value > TOL:
+            print(f"  for mission year {year}: {value:,.1f} kg")
+
     earth_prop = solution["earth_prop"]
     print(f"\nEarth propellant total: {earth_prop['total']:,.1f} kg")
     for year, value in earth_prop["by_year"].items():
@@ -331,10 +377,14 @@ def print_summary(solution):
     print(f"\nFull-horizon lifecycle ({lifecycle['mission_years']} years):")
     print(f"  payload to GEO : {lifecycle['total_payload_kg']:,.1f} kg")
     print(f"  capex          : {lifecycle['capex_total']:,.0f}")
+    print(f"    infra to GTO  : {lifecycle['infrastructure_to_GTO_total']:,.0f}")
     print(f"  maintenance    : {lifecycle['maintenance_total']:,.0f}")
     print(f"  Earth propellant: {lifecycle['earth_prop_total']:,.0f}")
     print(f"  total          : {lifecycle['total']:,.0f}")
-    print(f"  cost per kg    : {lifecycle['cost_per_kg']:,.0f}")
+    if lifecycle["cost_per_kg"] is None:
+        print("  cost per kg    : n/a (no payload demand)")
+    else:
+        print(f"  cost per kg    : {lifecycle['cost_per_kg']:,.0f}")
 
 
 if __name__ == "__main__":
