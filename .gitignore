@@ -1,0 +1,9 @@
+# Python bytecode and cache directories
+__pycache__/
+*.py[cod]
+
+# Local research material and generated artifacts
+/references/
+/results/
+/tmp/
+/발표자료/
