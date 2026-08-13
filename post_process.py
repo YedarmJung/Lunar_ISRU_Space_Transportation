@@ -3,8 +3,9 @@ import math
 from pathlib import Path
 
 
-DEFAULT_SOLUTION = Path("results") / "latest_solution.json"
-DEFAULT_PLOT_DIR = Path("results") / "plots"
+RESULT_DIR = Path("results")
+LEGACY_SOLUTION = RESULT_DIR / "latest_solution.json"
+LEGACY_PLOT_DIR = RESULT_DIR / "plots"
 
 # top-to-bottom order for the time-expanded plot (Earth cluster -> Moon cluster)
 NODE_ORDER = ["LEO", "GTO", "GEO", "EML1", "NRHO", "LLO", "Moon"]
@@ -34,21 +35,33 @@ PROP_TANK_COLOR = "#2F7D32"
 
 
 def main():
-    for path in generate_plots(DEFAULT_SOLUTION):
+    for path in generate_plots():
         print(f"saved {path}")
 
 
-def generate_plots(solution_path=DEFAULT_SOLUTION, plot_dir=DEFAULT_PLOT_DIR):
-    global plt, Line2D
-    import matplotlib
+def _latest_solution_path():
+    candidates = sorted(RESULT_DIR.glob("plots_*/latest_solution.json"))
+    if candidates:
+        return candidates[-1]
+    if LEGACY_SOLUTION.exists():
+        return LEGACY_SOLUTION
+    raise FileNotFoundError(
+        f"No latest_solution.json found under {RESULT_DIR.resolve()}"
+    )
 
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.lines import Line2D
 
-    plt.rcParams["font.family"] = "Calibri"
+def generate_plots(solution_path=None, plot_dir=None):
+    _load_matplotlib()
 
-    solution_path = Path(solution_path)
+    solution_path = (
+        _latest_solution_path() if solution_path is None else Path(solution_path)
+    )
+    if plot_dir is None:
+        plot_dir = (
+            solution_path.parent
+            if solution_path.parent.name.startswith("plots_")
+            else LEGACY_PLOT_DIR
+        )
     plot_dir = Path(plot_dir)
     plot_dir.mkdir(parents=True, exist_ok=True)
 
@@ -57,6 +70,7 @@ def generate_plots(solution_path=DEFAULT_SOLUTION, plot_dir=DEFAULT_PLOT_DIR):
 
     makers = [
         plot_flow_over_time,
+        plot_infrastructure_flow_over_time,
         plot_network_flow_map,
         plot_cost_breakdown,
         plot_cost_share,
@@ -66,6 +80,29 @@ def generate_plots(solution_path=DEFAULT_SOLUTION, plot_dir=DEFAULT_PLOT_DIR):
     ]
     paths = [maker(solution, plot_dir) for maker in makers]
     return [str(p) for p in paths if p is not None]
+
+
+def _load_matplotlib():
+    global plt, Line2D
+    if "plt" in globals():
+        return
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+
+    plt.rcParams["font.family"] = "Calibri"
+
+
+def generate_flow_plot(solution, plot_dir, filename="flow_over_time.png"):
+    """Generate only the time-expanded flow plot from an in-memory solution."""
+    _load_matplotlib()
+    plot_dir = Path(plot_dir)
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    path = plot_flow_over_time(solution, plot_dir, filename=filename)
+    return str(path) if path is not None else None
 
 
 def _ordered_nodes(nodes):
@@ -78,7 +115,7 @@ def _color_map(commodities):
     return {k: plt.cm.tab10.colors[i % 10] for i, k in enumerate(commodities)}
 
 
-def plot_flow_over_time(solution, plot_dir):
+def plot_flow_over_time(solution, plot_dir, filename="flow_over_time.png"):
     nodes = _ordered_nodes(solution["nodes"])
     # include BOTH move and hold arcs (hold = inventory sitting at a node);
     # drop near-zero numerical-noise flows (loose-gap artifacts) so phantom routes vanish.
@@ -180,7 +217,7 @@ def plot_flow_over_time(solution, plot_dir):
         f"mission year (time step = {mis['days_per_step']} days)"
     )
     ax.set_ylabel("node")
-    ax.set_title("Commodity flow over time", pad=36)
+    ax.set_title(solution.get("plot_title", "Commodity flow over time"), pad=36)
 
     cats_present = [c for c in CAT_STYLE if any(_cat(f) == c for f in flows)]
     handles = [Line2D([0], [0], color=CAT_STYLE[c][0], lw=3, linestyle=CAT_STYLE[c][1], label=c)
@@ -203,8 +240,363 @@ def plot_flow_over_time(solution, plot_dir):
     )
     fig.tight_layout()
 
-    path = plot_dir / "flow_over_time.png"
+    path = plot_dir / filename
     fig.savefig(path, dpi=180)
+    plt.close(fig)
+    return path
+
+
+def plot_infrastructure_flow_over_time(solution, plot_dir):
+    """Plot transported Infra, fleet additions, and installed asset stocks."""
+    mission = solution["mission"]
+    mission_years = mission["mission_years"]
+    if mission["days_per_year"] % mission["days_per_step"]:
+        raise ValueError("days_per_year must be divisible by days_per_step")
+    steps_per_year = mission["days_per_year"] // mission["days_per_step"]
+    T = solution["T"]
+
+    category_style = {
+        "SWE": {"color": COST_COLORS["SWE"], "offset": -0.18},
+        "DWE": {"color": COST_COLORS["DWE"], "offset": -0.06},
+        "H2O tank": {"color": COST_COLORS["storage"], "offset": 0.06},
+        "Prop tank": {"color": PROP_TANK_COLOR, "offset": 0.18},
+    }
+
+    def annual_values(info, annual_key, final_key):
+        annual = info.get(annual_key)
+        if annual:
+            return [float(annual.get(str(year), 0.0))
+                    for year in range(1, mission_years + 1)]
+        # Compatibility with older result files that only reported final stock.
+        final = float(info.get(final_key, 0.0))
+        return [final] * mission_years
+
+    stock = {}
+
+    def add_stock(node, category, values):
+        if max(values, default=0.0) > TOL:
+            stock.setdefault(node, {})[category] = values
+
+    swe = solution.get("facilities", {}).get("SWE", {})
+    add_stock(
+        swe.get("node", "Moon"),
+        "SWE",
+        annual_values(swe, "capacity_by_year", "q"),
+    )
+    for node, info in solution.get("facilities", {}).get("DWE", {}).items():
+        add_stock(node, "DWE", annual_values(info, "capacity_by_year", "q"))
+    for node, info in solution.get("storage", {}).items():
+        add_stock(node, "H2O tank", annual_values(info, "H2O_by_year", "H2O"))
+        add_stock(node, "Prop tank", annual_values(info, "Prop_by_year", "Prop"))
+
+    # Portable tanks are delivered as generic Infra, installed at Moon, and
+    # then become mobile H2O_Tank / Prop_Tank commodities.  Show their annual
+    # installation events without treating them as persistent fixed-facility
+    # bands at Moon.
+    portable_tank_additions = {}
+    first_tank_by_year = solution.get("first_tank", {}).get("by_year", {})
+    portable_tank_names = {
+        "H2O_Tank": "Portable H2O tank",
+        "Prop_Tank": "Portable Prop tank",
+    }
+    for year_index in range(mission_years):
+        annual = first_tank_by_year.get(str(year_index + 1), {})
+        breakdown = {
+            label: float(annual.get(tank, 0.0))
+            for tank, label in portable_tank_names.items()
+            if float(annual.get(tank, 0.0)) > TOL
+        }
+        if breakdown:
+            portable_tank_additions["Moon", year_index] = breakdown
+
+    infra_flows = [
+        flow for flow in solution.get("flows", [])
+        if flow["commodity"] == "Infra" and flow["departed"] > 1.0
+    ]
+    fleet_additions = solution.get("fleet_additions_by_year", {})
+    supply_by_time = (
+        solution.get("infrastructure_resupply", {}).get("by_time", {})
+    )
+
+    relevant_nodes = set(stock)
+    for flow in infra_flows:
+        relevant_nodes.update((flow["tail"], flow["head"]))
+    for annual in fleet_additions.values():
+        if annual.get("OTV", 0):
+            relevant_nodes.add("GTO")
+        if annual.get("RT", 0):
+            relevant_nodes.add("Moon")
+    if portable_tank_additions:
+        relevant_nodes.add("Moon")
+    if not relevant_nodes:
+        return None
+
+    nodes = [node for node in NODE_ORDER if node in relevant_nodes and node != "LEO"]
+    nodes += sorted(relevant_nodes - set(nodes) - {"LEO"})
+    lane_spacing = 1.25
+    deploy_y = 0.0
+    y = {node: (index + 1) * lane_spacing for index, node in enumerate(nodes)}
+
+    all_stock_values = [
+        value
+        for categories in stock.values()
+        for values in categories.values()
+        for value in values
+        if value > TOL
+    ]
+    max_stock = max(all_stock_values, default=1.0)
+    max_addition = 1.0
+    additions = {}
+    addition_breakdown = {}
+    for node, categories in stock.items():
+        for year_index in range(mission_years):
+            total = 0.0
+            breakdown = {}
+            for category, values in categories.items():
+                previous = values[year_index - 1] if year_index else 0.0
+                addition = max(0.0, values[year_index] - previous)
+                if addition > TOL:
+                    breakdown[category] = addition
+                    total += addition
+            if total > TOL:
+                additions[node, year_index] = total
+                addition_breakdown[node, year_index] = breakdown
+                max_addition = max(max_addition, total)
+
+    for key, breakdown in portable_tank_additions.items():
+        addition_breakdown.setdefault(key, {}).update(breakdown)
+        additions[key] = additions.get(key, 0.0) + sum(breakdown.values())
+    max_addition = max([1.0, *additions.values()])
+
+    fig, ax = plt.subplots(figsize=(18, 10))
+    ax.axhline(deploy_y, color="0.78", lw=0.8, zorder=0)
+    for node in nodes:
+        ax.axhline(y[node], color="0.9", lw=0.8, zorder=0)
+    for boundary in range(mission_years + 1):
+        time = boundary * steps_per_year
+        ax.axvline(time, color="0.82", ls=":", lw=0.9, zorder=0)
+
+    # Persistent facility state: each colored segment covers the year in which
+    # that stock is available; line thickness is proportional to sqrt(dry mass).
+    for node, categories in stock.items():
+        for category, values in categories.items():
+            style = category_style[category]
+            yy = y[node] + style["offset"]
+            for year_index, value in enumerate(values):
+                if value <= TOL:
+                    continue
+                x0 = year_index * steps_per_year
+                x1 = min((year_index + 1) * steps_per_year, T - 1)
+                linewidth = 1.2 + 7.2 * math.sqrt(value / max_stock)
+                ax.plot(
+                    [x0, x1], [yy, yy],
+                    color=style["color"], lw=linewidth, alpha=0.72,
+                    solid_capstyle="butt", zorder=2,
+                )
+
+    max_flow = max((flow["departed"] for flow in infra_flows), default=1.0)
+    # Held infrastructure stays visible but subdued behind actual move arcs.
+    for flow in infra_flows:
+        if flow["kind"] != "hold":
+            continue
+        linewidth = 0.8 + 3.2 * math.sqrt(flow["departed"] / max_flow)
+        ax.plot(
+            [flow["time"], flow["arrival_time"]],
+            [y[flow["tail"]], y[flow["head"]]],
+            color="0.25", ls=":", lw=linewidth, alpha=0.35,
+            solid_capstyle="round", zorder=3,
+        )
+
+    # RT infrastructure moves, with labels in tonnes.
+    route_label_index = {}
+    for flow in infra_flows:
+        if flow["kind"] != "move":
+            continue
+        linewidth = 1.2 + 4.2 * math.sqrt(flow["departed"] / max_flow)
+        ax.annotate(
+            "",
+            xy=(flow["arrival_time"], y[flow["head"]]),
+            xytext=(flow["time"], y[flow["tail"]]),
+            arrowprops={
+                "arrowstyle": "-|>",
+                "color": "0.08",
+                "lw": linewidth,
+                "alpha": 0.78,
+                "mutation_scale": 9 + 2 * linewidth,
+                "shrinkA": 2,
+                "shrinkB": 2,
+            },
+            zorder=5,
+        )
+        midpoint_x = (flow["time"] + flow["arrival_time"]) / 2
+        midpoint_y = (y[flow["tail"]] + y[flow["head"]]) / 2
+        route = (flow["tail"], flow["head"])
+        label_index = route_label_index.get(route, 0)
+        route_label_index[route] = label_index + 1
+        label_offset = 0.12 if label_index % 2 == 0 else -0.12
+        ax.text(
+            midpoint_x + 0.12, midpoint_y + label_offset,
+            f"{flow['departed'] / 1000:.1f} t"
+            if flow["departed"] >= 10000
+            else f"{flow['departed'] / 1000:.2f} t",
+            fontsize=7, color="0.12", ha="left",
+            va="bottom" if label_offset > 0 else "top",
+            bbox={"boxstyle": "round,pad=0.12", "fc": "white",
+                  "ec": "none", "alpha": 0.72},
+            zorder=7,
+        )
+
+    # Earth-to-GTO infrastructure supply and annual spacecraft additions.
+    if "GTO" in y:
+        for raw_time, raw_mass in supply_by_time.items():
+            time, mass = int(raw_time), float(raw_mass)
+            if mass <= TOL:
+                continue
+            ax.annotate(
+                "",
+                xy=(time, y["GTO"] - 0.02),
+                xytext=(time - 0.75, deploy_y + 0.04),
+                arrowprops={"arrowstyle": "-|>", "color": "goldenrod",
+                            "lw": 2.2, "ls": "--", "mutation_scale": 12},
+                zorder=4,
+            )
+            ax.text(
+                time - 0.82, deploy_y - 0.08, f"Infra {mass / 1000:.2f} t",
+                fontsize=7, color="darkgoldenrod", ha="right", va="top",
+            )
+
+    vehicle_style = {
+        "OTV": {"target": "GTO", "color": "mediumpurple",
+                "offset": -2.05, "label_y": 0.07},
+        "RT": {"target": "Moon", "color": "tab:red",
+               "offset": -0.65, "label_y": 0.25},
+    }
+    for raw_year, annual in fleet_additions.items():
+        year = int(raw_year)
+        deployment_time = (year - 1) * steps_per_year
+        for vehicle, style in vehicle_style.items():
+            count = int(round(annual.get(vehicle, 0)))
+            target = style["target"]
+            if count <= 0 or target not in y:
+                continue
+            origin_x = deployment_time + style["offset"]
+            ax.annotate(
+                "",
+                xy=(deployment_time, y[target]),
+                xytext=(origin_x, deploy_y),
+                arrowprops={"arrowstyle": "-|>", "color": style["color"],
+                            "lw": 1.8, "ls": "--", "mutation_scale": 12,
+                            "alpha": 0.9},
+                zorder=4,
+            )
+            ax.text(
+                origin_x, deploy_y + style["label_y"], f"{vehicle} +{count}",
+                fontsize=8, color=style["color"], ha="center", va="bottom",
+            )
+
+    # Installation events and final stock labels make every selected facility
+    # visible, including nodes that never receive a post-initial Infra shipment.
+    for (node, year_index), mass in additions.items():
+        time = year_index * steps_per_year
+        is_initial = year_index == 0
+        size = 28 + 90 * math.sqrt(mass / max_addition)
+        ax.scatter(
+            time, y[node], s=size,
+            marker="o" if is_initial else "D",
+            facecolor="white" if is_initial else "0.12",
+            edgecolor="0.12", linewidth=1.0, zorder=8,
+        )
+        if is_initial:
+            label = f"initial {mass / 1000:.2f} t"
+        else:
+            short_name = {
+                "SWE": "SWE",
+                "DWE": "DWE",
+                "H2O tank": "H2O",
+                "Prop tank": "Prop",
+                "Portable H2O tank": "Portable H2O",
+                "Portable Prop tank": "Portable Prop",
+            }
+            detail = "\n".join(
+                f"{short_name[category]} {value / 1000:.2f} t"
+                for category, value in addition_breakdown[node, year_index].items()
+            )
+            label = f"+{mass / 1000:.2f} t\n{detail}"
+        ax.annotate(
+            label, (time, y[node]),
+            xytext=(4, 7), textcoords="offset points",
+            fontsize=7, color="0.15", ha="left", va="bottom",
+            bbox={"boxstyle": "round,pad=0.12", "fc": "white",
+                  "ec": "none", "alpha": 0.68},
+            zorder=9,
+        )
+
+    summary_x = T - 1 + 2.5
+    for node, categories in stock.items():
+        parts = [
+            f"{category} {values[-1] / 1000:.2f} t"
+            for category, values in categories.items()
+            if values[-1] > TOL
+        ]
+        if parts:
+            ax.text(
+                summary_x, y[node], " | ".join(parts),
+                fontsize=7.5, color="0.2", ha="left", va="center",
+            )
+
+    legend_handles = [
+        Line2D([0], [0], color=style["color"], lw=5, label=category)
+        for category, style in category_style.items()
+        if any(category in categories for categories in stock.values())
+    ]
+    legend_handles += [
+        Line2D([0], [0], color="0.08", lw=3, marker=">", label="Infra move (RT)"),
+        Line2D([0], [0], color="0.25", lw=2, ls=":", label="Infra hold"),
+        Line2D([0], [0], color="goldenrod", lw=2, ls="--", label="Infra supply to GTO"),
+        Line2D([0], [0], color="mediumpurple", lw=2, ls="--", label="OTV addition"),
+        Line2D([0], [0], color="tab:red", lw=2, ls="--", label="RT addition"),
+        Line2D([0], [0], marker="D", color="0.12", lw=0,
+               markerfacecolor="0.12", label="Installed hardware addition"),
+    ]
+    ax.legend(
+        handles=legend_handles, loc="lower center", bbox_to_anchor=(0.5, 1.01),
+        ncol=5, fontsize=8, frameon=False,
+    )
+
+    year_ticks = [year * steps_per_year for year in range(mission_years + 1)]
+    year_labels = [f"Y{year + 1}" for year in range(mission_years)] + ["End"]
+    ax.set_xticks(year_ticks)
+    ax.set_xticklabels(year_labels)
+    ax.set_yticks([deploy_y] + [y[node] for node in nodes])
+    ax.set_yticklabels(["Earth supply / fleet"] + nodes)
+    ax.set_xlim(-2.5, T - 1 + 27)
+    ax.set_ylim(-0.45, max(y.values()) + 0.72)
+    ax.set_xlabel(
+        f"mission time (1 step = {mission['days_per_step']} days; "
+        "facility bands show stock available during each year)"
+    )
+    ax.set_ylabel("node")
+    ax.set_title("Infrastructure delivery and installed-facility evolution", pad=52)
+    ax.grid(axis="x", color="0.94", lw=0.7)
+    status = solution.get("status")
+    gap = solution.get("mip_gap")
+    if status == 2:
+        solution_note = "optimal solution"
+    elif gap is not None:
+        solution_note = f"solver incumbent (status {status}, MIP gap {gap:.2%})"
+    else:
+        solution_note = f"solver incumbent (status {status})"
+    fig.text(
+        0.5, 0.012,
+        "Band/marker size scales with square root of dry hardware mass; "
+        "portable tanks appear in Moon installation markers, not fixed-stock bands; "
+        f"labels at right show final fixed stock; {solution_note}.",
+        ha="center", va="bottom", fontsize=8, color="0.35",
+    )
+    fig.tight_layout(rect=(0, 0.035, 1, 0.94))
+
+    path = plot_dir / "infrastructure_flow_over_time.png"
+    fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path
 

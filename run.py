@@ -1,19 +1,21 @@
 import json
 import math
+import shutil
+from datetime import datetime
 from pathlib import Path
 
 from gurobipy import GRB
 
 from data import get_data
-from model import build_and_solve
+from incumbent_flow_plot import IncumbentFlowPlotter
+from model import build_model, solve_model
 from post_process import generate_plots
 
 
 RESULT_DIR = Path("results")
-SOLUTION_PATH = RESULT_DIR / "latest_solution.json"
-DEMAND_PROFILE_PATH = Path("inputs") / "demand_5yr_50tpy.json"
+DEMAND_PROFILE_PATH = Path("inputs") / "demand_10yr_ramp_60to150t.json"
 GUROBI_PARAMS = {
-    "TimeLimit": 6 * 3600,
+    "TimeLimit": 14 * 3600,
     "MIPGap": 0.025,
     "MIPFocus": 1,
     "Cuts": 2,
@@ -25,14 +27,23 @@ TOL = 1e-6
 
 
 def main():
-    RESULT_DIR.mkdir(exist_ok=True)
+    run_dir = _create_run_dir()
+    solution_path = run_dir / "latest_solution.json"
+    input_copy_path = run_dir / DEMAND_PROFILE_PATH.name
+    shutil.copy2(DEMAND_PROFILE_PATH, input_copy_path)
+
     data = get_data(DEMAND_PROFILE_PATH)
-    params = {**GUROBI_PARAMS, "LogFile": str(RESULT_DIR / "full_horizon_5yr.log")}
-    model, variables = build_and_solve(data, gurobi_params=params)
+    params = {**GUROBI_PARAMS, "LogFile": str(run_dir / "solver.log")}
+    model, variables = build_model(data, gurobi_params=params)
+    incumbent_plotter = IncumbentFlowPlotter(data, variables, run_dir)
+    try:
+        solve_model(model, callback=incumbent_plotter)
+    finally:
+        incumbent_plotter.close()
 
     if model.Status == GRB.INFEASIBLE:
         print("\nINFEASIBLE: GEO payload demand cannot be met.")
-        _write_iis(model)
+        _write_iis(model, run_dir)
         return
     if model.SolCount == 0:
         print(
@@ -42,18 +53,20 @@ def main():
         return
 
     solution = build_solution(data, model, variables)
-    write_solution(solution, SOLUTION_PATH)
+    write_solution(solution, solution_path)
 
     label = "Optimal" if model.Status == GRB.OPTIMAL else "Best feasible"
     print(f"\n{label} lifecycle cost = {model.ObjVal:,.0f}")
     if model.Status != GRB.OPTIMAL:
         gap = f"{model.MIPGap:.2%}" if math.isfinite(model.MIPGap) else "not available"
         print(f"Solver status = {model.Status}, gap = {gap}")
-    print(f"Saved solution -> {SOLUTION_PATH}")
+    print(f"Run artifacts -> {run_dir}")
+    print(f"Saved solution -> {solution_path}")
+    print(f"Saved input copy -> {input_copy_path}")
     print_summary(solution)
 
     try:
-        plot_paths = generate_plots(SOLUTION_PATH)
+        plot_paths = generate_plots(solution_path, run_dir)
     except ImportError as exc:
         print(f"\nPlots were not generated (matplotlib missing?): {exc}")
         return
@@ -61,6 +74,22 @@ def main():
     print("\nSaved plots:")
     for path in plot_paths:
         print(f"  {path}")
+
+
+def _create_run_dir():
+    """Create a Windows-safe, timestamped directory for one solver run."""
+    RESULT_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    suffix = 0
+
+    while True:
+        suffix_text = "" if suffix == 0 else f"_{suffix:02d}"
+        run_dir = RESULT_DIR / f"plots_{timestamp}{suffix_text}"
+        try:
+            run_dir.mkdir(exist_ok=False)
+            return run_dir
+        except FileExistsError:
+            suffix += 1
 
 
 def _year_for_step(mission, step):
@@ -331,10 +360,10 @@ def write_solution(solution, path):
         json.dump(solution, f, indent=2)
 
 
-def _write_iis(model):
+def _write_iis(model, output_dir):
     try:
         model.computeIIS()
-        iis_path = RESULT_DIR / "infeasible.ilp"
+        iis_path = Path(output_dir) / "infeasible.ilp"
         model.write(str(iis_path))
         print(f"Wrote IIS (conflicting constraints) -> {iis_path}")
     except Exception as exc:  # noqa: BLE001
