@@ -13,7 +13,10 @@ from post_process import generate_plots
 
 
 RESULT_DIR = Path("results")
-DEMAND_PROFILE_PATH = Path("inputs") / "demand_10yr_ramp_60to150t.json"
+DEMAND_PROFILE_PATH = Path("inputs") / "demand_10yr_ramp_20to100t.json"
+# Point this at a .mst produced by make_warm_start.py to warm start the solve.
+# Leave it as None to start from scratch.
+#WARM_START_PATH = Path("results/plots_20260815_143840/start.mst")
 GUROBI_PARAMS = {
     "TimeLimit": 14 * 3600,
     "MIPGap": 0.025,
@@ -21,6 +24,7 @@ GUROBI_PARAMS = {
     "Cuts": 2,
     "Symmetry": 2,
     "Heuristics": 0.2,
+#    "Presolve" : 2,
 }
 
 TOL = 1e-6
@@ -35,6 +39,7 @@ def main():
     data = get_data(DEMAND_PROFILE_PATH)
     params = {**GUROBI_PARAMS, "LogFile": str(run_dir / "solver.log")}
     model, variables = build_model(data, gurobi_params=params)
+    _load_warm_start(model, run_dir)
     incumbent_plotter = IncumbentFlowPlotter(data, variables, run_dir)
     try:
         solve_model(model, callback=incumbent_plotter)
@@ -358,6 +363,30 @@ def write_solution(solution, path):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         json.dump(solution, f, indent=2)
+
+
+def _load_warm_start(model, run_dir):
+    """Read the MIP start named by WARM_START_PATH, or start from scratch.
+
+    A missing WARM_START_PATH (commented out or deleted) counts as no warm
+    start, so the constant can simply be removed to force a cold start.
+    """
+    warm_start = globals().get("WARM_START_PATH")
+    if warm_start is None:
+        print("Warm start: none (solving from scratch)")
+        return
+
+    start_path = Path(warm_start)
+    if not start_path.exists():
+        # Silently cold starting here would waste a multi-hour run.
+        raise FileNotFoundError(
+            f"WARM_START_PATH is set but the file does not exist: {start_path}"
+        )
+
+    model.update()
+    model.read(str(start_path))
+    shutil.copy2(start_path, run_dir / start_path.name)
+    print(f"Warm start: {start_path}")
 
 
 def _write_iis(model, output_dir):

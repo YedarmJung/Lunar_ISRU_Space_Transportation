@@ -210,6 +210,12 @@ def get_data(profile_path):
     add_two_way(arcs, "NRHO", "Moon", 1, periods(T, 1), delta_v_km_s=2.6)
     add_two_way(arcs, "LLO", "Moon", 1, periods(T, 1), delta_v_km_s=1.87)
 
+    #BLT orbit
+
+    add_two_way(arcs, "GTO", "NRHO", 4, periods(T, 4), delta_v_km_s=0.75)
+    add_two_way(arcs, "GTO", "LLO", 4, periods(T, 4), delta_v_km_s=1.48)
+        
+
     return NetworkData(
         nodes=nodes,
         commodities=commodities,

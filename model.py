@@ -7,7 +7,7 @@ from build_cost import BUILD_COST as bc
 
 
 INFRA_RESUPPLY_CAP_KG = 100_000.0
-
+FLEET_CAP = {"OTV": 1, "RT": 2}
 
 def steps_per_year(data):
     days_per_year = data.mission["days_per_year"]
