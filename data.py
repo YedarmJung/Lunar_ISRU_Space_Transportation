@@ -170,6 +170,12 @@ def get_data(profile_path):
             "dry_mass": 6000.0,
             "isp_s": 420,
         },
+        "OTV": {
+            "payload_cap": 10000.0,
+            "propellant_cap": 14000.0,
+            "dry_mass": 2500.0,
+            "isp_s": 420,
+        },
         "RT": {
             "payload_cap": 30000.0,
             "propellant_cap": 20000.0,

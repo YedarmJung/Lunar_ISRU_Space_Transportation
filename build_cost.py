@@ -41,6 +41,7 @@ BUILD_COST = {
 
     # ---- Spacecraft manufacturing cost (Gkaravela Table 3: $150M each)
     "OTV_unit": 110_000_000.0,      # $/OTV   [Gkaravela]
+    "OTV_unit": 30_000_000.0,      # $/OTV   [Helios]
     "RT_unit": 150_000_000.0,       # $/RT    [Gkaravela]
 
     # ---- Initial deployment propellant material cost
