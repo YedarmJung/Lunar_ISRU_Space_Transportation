@@ -20,6 +20,7 @@ class IncumbentFlowPlotter:
         self.interval_seconds = interval_seconds
         self.x_items = list(variables["x"].items())
         self.y_items = list(variables["y"].items())
+        self.service_items = list(variables["service"].items())
         self.best_objective = None
         self.latest_snapshot = None
         self.snapshot_version = 0
@@ -43,7 +44,12 @@ class IncumbentFlowPlotter:
 
             x_values = model.cbGetSolution([var for _, var in self.x_items])
             y_values = model.cbGetSolution([var for _, var in self.y_items])
-            snapshot = self._build_snapshot(x_values, y_values, objective)
+            service_values = model.cbGetSolution(
+                [var for _, var in self.service_items]
+            )
+            snapshot = self._build_snapshot(
+                x_values, y_values, service_values, objective
+            )
             with self.lock:
                 self.best_objective = objective
                 self.latest_snapshot = snapshot
@@ -88,7 +94,7 @@ class IncumbentFlowPlotter:
                 print(f"\nCould not generate hourly incumbent flow plot: {exc}")
             elapsed_hours += 1
 
-    def _build_snapshot(self, x_values, y_values, objective):
+    def _build_snapshot(self, x_values, y_values, service_values, objective):
         flows = []
         for ((commodity, mode, arc_id, time), _), value in zip(
             self.x_items, x_values
@@ -127,6 +133,18 @@ class IncumbentFlowPlotter:
                 }
             )
 
+        service_by_event = {
+            event_key: value > 0.5
+            for (event_key, _), value in zip(self.service_items, service_values)
+        }
+        satellite_service = [
+            {
+                **event,
+                "served": service_by_event[event["year"], event["event_id"]],
+            }
+            for event in self.data.mission["demand_events"]
+        ]
+
         return {
             "objective": objective,
             "T": self.data.T,
@@ -135,4 +153,5 @@ class IncumbentFlowPlotter:
             "mission": self.data.mission,
             "flows": flows,
             "trips": trips,
+            "satellite_service": satellite_service,
         }

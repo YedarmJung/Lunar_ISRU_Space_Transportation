@@ -199,14 +199,29 @@ def plot_flow_over_time(solution, plot_dir, filename="flow_over_time.png"):
 
     # Payload supply/demand events from the explicit input profile.
     events = mis["demand_events"]
+    service_by_event = {
+        (event["year"], event["event_id"]): event["served"]
+        for event in solution.get("satellite_service", [])
+    }
     max_mass = max((event["mass_kg"] for event in events), default=1.0)
     if "GEO" in y:
         for event in events:
             size = 140 + 300 * event["mass_kg"] / max_mass
-            ax.scatter(event["demand_step"], y["GEO"], marker="*", s=size, color="crimson",
-                       edgecolor="black", linewidth=0.6, zorder=6)
+            served = service_by_event.get(
+                (event["year"], event["event_id"]), True
+            )
+            if served:
+                ax.scatter(event["demand_step"], y["GEO"], marker="*", s=size,
+                           color="crimson", edgecolor="black", linewidth=0.6, zorder=6)
+            else:
+                ax.scatter(event["demand_step"], y["GEO"], marker="x", s=size * 0.7,
+                           color="0.55", linewidth=1.4, zorder=6)
     if "GTO" in y:
         for event in events:
+            if not service_by_event.get(
+                (event["year"], event["event_id"]), True
+            ):
+                continue
             size = 140 + 300 * event["mass_kg"] / max_mass
             ax.scatter(event["supply_step"], y["GTO"], marker="*", s=size, color="gold",
                        edgecolor="black", linewidth=0.6, zorder=6)
@@ -228,6 +243,11 @@ def plot_flow_over_time(solution, plot_dir, filename="flow_over_time.png"):
         Line2D([0], [0], marker="*", color="w", markerfacecolor="crimson",
                markeredgecolor="black", markersize=15, label="PL demand @GEO"),
     ]
+    if any(not served for served in service_by_event.values()):
+        handles.append(
+            Line2D([0], [0], marker="x", color="0.55", linestyle="None",
+                   markersize=10, label="unserved satellite")
+        )
     ax.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 1.005), ncol=len(handles), fontsize=8)
 
     ax.grid(axis="x", color="0.93", lw=0.8)
@@ -683,10 +703,11 @@ def plot_network_flow_map(solution, plot_dir):
 
 
 def plot_cost_breakdown(solution, plot_dir):
+    summary_keys = {"total", "physical_total", "objective_total"}
     costs = {
         name: value
         for name, value in solution["cost_breakdown"].items()
-        if name != "total" and abs(value) > TOL
+        if name not in summary_keys and abs(value) > TOL
     }
     if not costs:
         return None
@@ -696,7 +717,10 @@ def plot_cost_breakdown(solution, plot_dir):
 
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.bar(range(len(labels)), values, color="slateblue")
-    ax.set_title(f"Objective cost breakdown (total = {_money(solution['cost_breakdown']['total'])})")
+    objective_total = solution["cost_breakdown"].get(
+        "objective_total", solution["cost_breakdown"]["total"]
+    )
+    ax.set_title(f"Objective cost breakdown (total = {_money(objective_total)})")
     ax.set_ylabel("cost [$]")
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=25, ha="right")
@@ -768,7 +792,7 @@ def plot_cost_share(solution, plot_dir):
 
 def plot_demand_profile(solution, plot_dir):
     mission = solution.get("mission", {})
-    events = mission.get("demand_events", [])
+    events = solution.get("satellite_service", mission.get("demand_events", []))
     if not events:
         return None
 
@@ -776,29 +800,46 @@ def plot_demand_profile(solution, plot_dir):
     mission_years = mission["mission_years"]
     event_year = [event["demand_day"] / days_per_year for event in events]
     event_tonnes = [event["mass_kg"] / 1000.0 for event in events]
-    annual_tonnes = [
+    served = [event.get("served", True) for event in events]
+    candidate_annual_tonnes = [
         mission["demand_by_year_kg"].get(str(year), 0.0) / 1000.0
+        for year in range(1, mission_years + 1)
+    ]
+    served_annual_tonnes = [
+        solution.get("lifecycle", {}).get("demand_by_year_kg", {}).get(
+            str(year), candidate_annual_tonnes[year - 1] * 1000.0
+        ) / 1000.0
         for year in range(1, mission_years + 1)
     ]
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
-    ax1.scatter(event_year, event_tonnes, s=55, color="crimson", edgecolor="black", linewidth=0.4)
-    for x, mass in zip(event_year, event_tonnes):
-        ax1.vlines(x, 0, mass, color="crimson", alpha=0.25, lw=1)
+    for is_served, color, marker, label in [
+        (True, "crimson", "o", "served"),
+        (False, "0.55", "x", "unserved"),
+    ]:
+        xs = [x for x, selected in zip(event_year, served) if selected == is_served]
+        ys = [mass for mass, selected in zip(event_tonnes, served) if selected == is_served]
+        if xs:
+            ax1.scatter(xs, ys, s=55, color=color, marker=marker, label=label)
+            for x, mass in zip(xs, ys):
+                ax1.vlines(x, 0, mass, color=color, alpha=0.25, lw=1)
     ax1.set_xlabel("mission year (360 days/year)")
-    ax1.set_ylabel("event payload [t]")
-    ax1.set_title("Irregular GEO payload events")
+    ax1.set_ylabel("satellite mass [t]")
+    ax1.set_title("GEO satellite service decisions")
     ax1.set_xlim(0, mission_years)
     ax1.grid(color="0.92")
+    ax1.legend(frameon=False)
 
     years = list(range(1, mission_years + 1))
-    ax2.bar(years, annual_tonnes, color="slateblue")
+    ax2.bar(years, candidate_annual_tonnes, color="0.82", label="candidate")
+    ax2.bar(years, served_annual_tonnes, width=0.62, color="slateblue", label="served")
     ax2.set_xlabel("mission year")
     ax2.set_ylabel("annual payload [t]")
-    ax2.set_title("Annual GEO payload total (reported, not constrained)")
+    ax2.set_title("Candidate and served payload")
     ax2.set_xticks(years)
     ax2.grid(axis="y", color="0.92")
-    for year, mass in zip(years, annual_tonnes):
+    ax2.legend(frameon=False)
+    for year, mass in zip(years, served_annual_tonnes):
         ax2.text(year, mass, f"{mass:g}", ha="center", va="bottom", fontsize=8)
 
     fig.tight_layout()

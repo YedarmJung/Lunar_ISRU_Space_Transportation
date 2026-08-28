@@ -1,7 +1,8 @@
 import gurobipy as gp
 from gurobipy import GRB
+from math import exp
 
-from build_Q import build_Q
+from build_Q import G0_KM_S2, build_Q
 from build_dit import build_dit
 from build_cost import BUILD_COST as bc
 
@@ -54,13 +55,19 @@ def build_model(data, gurobi_params=None):
     in_arcs = {i: [a for a in A if arcs[a].head == i] for i in nodes}
 
 
-    d_it = build_dit(data)
     Q = build_Q(data)
     m = gp.Model("OOS_using_lunar_ISRU")
     for name, value in (gurobi_params or {}).items():
         m.setParam(name, value)
 
     '''-----------------------Define decision variables-----------------------'''
+
+    service_index = [
+        (event["year"], event["event_id"])
+        for event in mission["demand_events"]
+    ]
+    service = m.addVars(service_index, vtype=GRB.BINARY, name="service")
+    d_it = build_dit(data, service)
     
     LUNAR_NODES = {"Moon", "LLO"}
     dep=[]
@@ -121,11 +128,11 @@ def build_model(data, gurobi_params=None):
                     continue
 
                 spacecraft_index.append((v, a, t))
-    y = m.addVars(spacecraft_index, lb=0, vtype=GRB.INTEGER, name="y")
+    y = m.addVars(spacecraft_index, lb=0, ub=5, vtype=GRB.INTEGER, name="y")
 
     # New vehicles deployed at the start of each mission year.
     N_sc = m.addVars(
-        ["OTV", "RT"], year_indices, lb=0, vtype=GRB.INTEGER, name="N_sc"
+        ["OTV", "RT"], year_indices, lb=0, ub=5, vtype=GRB.INTEGER, name="N_sc"
     )
 
     #ISRU/storage variables
@@ -275,6 +282,19 @@ def build_model(data, gurobi_params=None):
         for node in ["GTO", "Moon"] for t in range(T)
     )
 
+    # Rejecting a satellite is penalized by the cost of loading the additional
+    # Earth-supplied propellant its payload would require for GTO -> GEO.
+
+    unserved_penalty_per_kg = 0.92 * (
+        bc["Ini_Prop_per_kg"] + bc["transfer_cost"]["GTO"]
+    )
+    obj_unserved_penalty = gp.quicksum(
+        event["mass_kg"]
+        * unserved_penalty_per_kg
+        * (1 - service[event["year"], event["event_id"]])
+        for event in mission["demand_events"]
+    )
+
     cost_terms = {
         "SWE": obj_swe,
         "DWE": obj_dwe,
@@ -283,6 +303,7 @@ def build_model(data, gurobi_params=None):
         "spacecraft": obj_spacecraft,
         "maintenance": obj_maint,
         "earth_prop": obj_earth_prop,
+        "unserved_penalty": obj_unserved_penalty,
     }
     obj = gp.quicksum(cost_terms.values())
 
@@ -356,7 +377,8 @@ def build_model(data, gurobi_params=None):
                     if (k, v, a, t) in arrival_expr
                 )
 
-                rhs = gp.LinExpr(d_it.get((k, i, t), 0.0))
+                rhs = gp.LinExpr()
+                rhs += d_it.get((k, i, t), 0.0)
                 if k == "Prop" and i in ("GTO", "Moon"):
                     rhs += earth_prop[i, t]
                 #처음 탱크
@@ -554,8 +576,9 @@ def build_model(data, gurobi_params=None):
     # (propellant scales with payload) and DAYS_PER_STEP, so it stays valid AND
     # reasonably tight across the demand-density sweep -- a fixed constant would
     # be too small at high demand and silently cut optimal solutions.
-    total_pl_demand = sum(-val for (k, i, t), val in d_it.items()
-                          if k == "PL" and val < 0.0)
+    total_pl_demand = sum(
+        event["mass_kg"] for event in mission["demand_events"]
+    )
     op_days = max(1, data.mission["mission_days"])
     swe_rate = 0.02917 * 2 / 1.5    # kg water / day per kg SWE (linear productivity)
     # assume up to ~40 kg propellant produced per kg payload (delivered prop plus
@@ -585,14 +608,16 @@ def build_model(data, gurobi_params=None):
     for e in E_SWE:
         for year in year_indices:
             m.addConstr(
-                q[e, year] <= BIG_M * SWE,
+                q[e, year] <= BIG_M,
+                #q[e, year] <= BIG_M * SWE,
                 name=f"install_SWE_{e}_{year}",
             )
 
     for e in E_Depot:
         for year in year_indices:
             m.addConstr(
-                q[e, year] <= BIG_M * DWE[e],
+                q[e, year] <= BIG_M,
+                #q[e, year] <= BIG_M * DWE[e],
                 name=f"install_DWE_{e}_{year}",
             )
 
@@ -610,6 +635,8 @@ def build_model(data, gurobi_params=None):
         "earth_prop": earth_prop,
         "first_Tank": first_Tank,
         "infra_supply": infra_supply,
+        "service": service,
+        "unserved_penalty_per_kg": unserved_penalty_per_kg,
         "cost_terms": cost_terms,
     }
     return m, variables

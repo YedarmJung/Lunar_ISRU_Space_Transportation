@@ -67,10 +67,8 @@ def _load_demand_profile(profile_path):
         raise ValueError("mission_years, days_per_year, and days_per_step must be positive")
 
     mission_days = mission_years * days_per_year
-    if mission_days % days_per_step != 0:
-        raise ValueError("The mission duration must be divisible by days_per_step")
-    if lead_days < 0 or lead_days % days_per_step != 0:
-        raise ValueError("payload_lead_days must be a nonnegative multiple of days_per_step")
+    if lead_days < 0:
+        raise ValueError("payload_lead_days must be nonnegative")
 
     normalized_events = []
     seen_ids = set()
@@ -95,10 +93,6 @@ def _load_demand_profile(profile_path):
         if demand_day < 0 or demand_day > mission_days:
             raise ValueError(
                 f"Demand event {event_id} demand_day must be inside 0..{mission_days}"
-            )
-        if demand_day % days_per_step != 0:
-            raise ValueError(
-                f"Demand event {event_id} demand_day must be a multiple of {days_per_step}"
             )
         if isinstance(mass_kg, bool) or not isinstance(mass_kg, (int, float)) or mass_kg <= 0:
             raise ValueError(f"Demand event {event_id} mass_kg must be positive")
@@ -165,13 +159,7 @@ def get_data(profile_path):
 
     vehicles = {
         "OTV": {
-            "payload_cap": 40000.0,
-            "propellant_cap": 40000.0,
-            "dry_mass": 6000.0,
-            "isp_s": 420,
-        },
-        "OTV": {
-            "payload_cap": 10000.0,
+            "payload_cap": 18500.0,
             "propellant_cap": 14000.0,
             "dry_mass": 2500.0,
             "isp_s": 420,

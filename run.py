@@ -16,15 +16,15 @@ RESULT_DIR = Path("results")
 DEMAND_PROFILE_PATH = Path("inputs") / "demand_10yr_ramp_20to100t.json"
 # Point this at a .mst produced by make_warm_start.py to warm start the solve.
 # Leave it as None to start from scratch.
-#WARM_START_PATH = Path("results/plots_20260815_143840/start.mst")
+WARM_START_PATH = Path("results/plots_20260821_135402/start.mst")
 GUROBI_PARAMS = {
     "TimeLimit": 14 * 3600,
     "MIPGap": 0.025,
-    "MIPFocus": 1,
-    "Cuts": 2,
+    "MIPFocus": 3,
+    "Cuts": 3,
     "Symmetry": 2,
-    "Heuristics": 0.2,
-#    "Presolve" : 2,
+    "Heuristics": 0.005,
+    "Presolve" : 2,
 }
 
 TOL = 1e-6
@@ -61,7 +61,7 @@ def main():
     write_solution(solution, solution_path)
 
     label = "Optimal" if model.Status == GRB.OPTIMAL else "Best feasible"
-    print(f"\n{label} lifecycle cost = {model.ObjVal:,.0f}")
+    print(f"\n{label} optimization objective = {model.ObjVal:,.0f}")
     if model.Status != GRB.OPTIMAL:
         gap = f"{model.MIPGap:.2%}" if math.isfinite(model.MIPGap) else "not available"
         print(f"Solver status = {model.Status}, gap = {gap}")
@@ -156,6 +156,15 @@ def build_solution(data, model, variables):
     mission_years = data.mission["mission_years"]
     years = range(mission_years)
     final_year = mission_years - 1
+
+    satellite_service = [
+        {
+            **event,
+            "served": variables["service"][event["year"], event["event_id"]].X
+            > 0.5,
+        }
+        for event in data.mission["demand_events"]
+    ]
 
     fleet_by_year = {
         str(year + 1): {
@@ -287,7 +296,9 @@ def build_solution(data, model, variables):
         "by_year": infra_supply_by_year,
         "by_installation_year": infra_supply_by_installation_year,
     }
-    breakdown, lifecycle = build_cost_breakdown(data, variables)
+    breakdown, lifecycle = build_cost_breakdown(
+        data, variables, satellite_service
+    )
 
     return {
         "status": int(model.Status),
@@ -316,6 +327,7 @@ def build_solution(data, model, variables):
         "facilities": facilities,
         "storage": storage,
         "production": production,
+        "satellite_service": satellite_service,
         "earth_prop": earth_prop,
         "first_tank": first_tank,
         "infrastructure_resupply": infrastructure_resupply,
@@ -324,35 +336,66 @@ def build_solution(data, model, variables):
     }
 
 
-def build_cost_breakdown(data, variables):
+def build_cost_breakdown(data, variables, satellite_service):
     mission = data.mission
     breakdown = {
         name: float(expression.getValue())
         for name, expression in variables["cost_terms"].items()
     }
-    total = sum(breakdown.values())
-    breakdown["total"] = total
+    unserved_penalty = breakdown["unserved_penalty"]
+    physical_total = sum(
+        value
+        for name, value in breakdown.items()
+        if name != "unserved_penalty"
+    )
+    objective_total = physical_total + unserved_penalty
 
-    operating_keys = {"maintenance", "earth_prop"}
+    operating_keys = {"maintenance", "earth_prop", "unserved_penalty"}
     capex = sum(
         value
         for name, value in breakdown.items()
-        if name not in operating_keys and name != "total"
+        if name not in operating_keys
     )
     maintenance = breakdown["maintenance"]
     earth_prop = breakdown["earth_prop"]
-    total_payload = mission["total_payload_kg"]
-    cost_per_kg = total / total_payload if total_payload > 0 else None
+    candidate_payload = mission["total_payload_kg"]
+    served_payload = sum(
+        event["mass_kg"] for event in satellite_service if event["served"]
+    )
+    unserved_payload = candidate_payload - served_payload
+    served_by_year = {
+        str(year): sum(
+            event["mass_kg"]
+            for event in satellite_service
+            if event["served"] and event["year"] == year
+        )
+        for year in range(1, mission["mission_years"] + 1)
+    }
+    cost_per_kg = physical_total / served_payload if served_payload > 0 else None
+
+    breakdown["physical_total"] = physical_total
+    breakdown["objective_total"] = objective_total
+    breakdown["total"] = physical_total
     lifecycle = {
         "mission_years": mission["mission_years"],
         "mission_days": mission["mission_days"],
-        "total_payload_kg": total_payload,
-        "demand_by_year_kg": mission["demand_by_year_kg"],
+        "candidate_satellites": len(satellite_service),
+        "served_satellites": sum(event["served"] for event in satellite_service),
+        "candidate_payload_kg": candidate_payload,
+        "served_payload_kg": served_payload,
+        "unserved_payload_kg": unserved_payload,
+        "total_payload_kg": served_payload,
+        "candidate_demand_by_year_kg": mission["demand_by_year_kg"],
+        "demand_by_year_kg": served_by_year,
         "capex_total": capex,
         "infrastructure_to_GTO_total": breakdown["infrastructure_to_GTO"],
         "maintenance_total": maintenance,
         "earth_prop_total": earth_prop,
-        "total": total,
+        "unserved_penalty_per_kg": variables["unserved_penalty_per_kg"],
+        "unserved_penalty": unserved_penalty,
+        "physical_total": physical_total,
+        "optimization_objective": objective_total,
+        "total": physical_total,
         "cost_per_kg": cost_per_kg,
     }
     return breakdown, lifecycle
@@ -433,16 +476,24 @@ def print_summary(solution):
 
     lifecycle = solution["lifecycle"]
     print(f"\nFull-horizon lifecycle ({lifecycle['mission_years']} years):")
-    print(f"  payload to GEO : {lifecycle['total_payload_kg']:,.1f} kg")
+    print(
+        f"  satellites     : {lifecycle['served_satellites']} / "
+        f"{lifecycle['candidate_satellites']} served"
+    )
+    print(f"  candidate payload: {lifecycle['candidate_payload_kg']:,.1f} kg")
+    print(f"  payload to GEO : {lifecycle['served_payload_kg']:,.1f} kg")
+    print(f"  unserved payload: {lifecycle['unserved_payload_kg']:,.1f} kg")
     print(f"  capex          : {lifecycle['capex_total']:,.0f}")
     print(f"    infra to GTO  : {lifecycle['infrastructure_to_GTO_total']:,.0f}")
     print(f"  maintenance    : {lifecycle['maintenance_total']:,.0f}")
     print(f"  Earth propellant: {lifecycle['earth_prop_total']:,.0f}")
-    print(f"  total          : {lifecycle['total']:,.0f}")
+    print(f"  physical total : {lifecycle['physical_total']:,.0f}")
+    print(f"  unserved penalty: {lifecycle['unserved_penalty']:,.0f}")
+    print(f"  optimization objective: {lifecycle['optimization_objective']:,.0f}")
     if lifecycle["cost_per_kg"] is None:
-        print("  cost per kg    : n/a (no payload demand)")
+        print("  cost per served kg: n/a (no served payload)")
     else:
-        print(f"  cost per kg    : {lifecycle['cost_per_kg']:,.0f}")
+        print(f"  cost per served kg: {lifecycle['cost_per_kg']:,.0f}")
 
 
 if __name__ == "__main__":

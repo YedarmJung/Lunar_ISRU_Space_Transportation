@@ -1,6 +1,6 @@
 """Build a Gurobi MIP start (.mst) from a saved latest_solution.json.
 
-Only the integer variables (y, N_sc, SWE, DWE) are written.  The continuous
+Only the integer variables (y, N_sc, SWE, DWE, service) are written.  The continuous
 variables are deliberately left undefined so Gurobi fixes the integers and
 re-solves the LP for the rest.  That reproduces the source objective while
 recomputing the continuous values cleanly, which also avoids carrying over the
@@ -21,7 +21,7 @@ from model import build_model
 
 
 # The saved solution to build the MIP start from.
-SOLUTION_PATH = Path("results") / "plots_20260815_143840" / "latest_solution.json"
+SOLUTION_PATH = Path("results") / "plots_20260821_135402" / "latest_solution.json"
 # Where to write the .mst.  None -> start.mst next to the solution above.
 OUTPUT_PATH = None
 
@@ -55,6 +55,7 @@ def apply_integer_start(variables, solution):
     n_sc = variables["N_sc"]
     swe = variables["SWE"]
     dwe = variables["DWE"]
+    service = variables["service"]
 
     # A complete integer assignment lets Gurobi finish the start with a single
     # LP solve instead of a sub-MIP, so the zero trips must be written too.
@@ -93,12 +94,21 @@ def apply_integer_start(variables, solution):
     for node, gvar in dwe.items():
         gvar.Start = 1.0 if node in installed_depots else 0.0
 
+    service_by_event = {
+        (event["year"], event["event_id"]): event.get("served", True)
+        for event in solution.get("satellite_service", [])
+    }
+    for event_key, gvar in service.items():
+        # Legacy solutions served every event and have no satellite_service list.
+        gvar.Start = 1.0 if service_by_event.get(event_key, True) else 0.0
+
     return {
         "y": len(y),
         "trips_nonzero": len(trips),
         "N_sc": len(n_sc),
         "DWE_installed": len(installed_depots),
         "SWE_installed": bool(swe_start),
+        "service": len(service),
     }
 
 
