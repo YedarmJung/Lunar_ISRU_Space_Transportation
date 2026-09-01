@@ -8,11 +8,10 @@ LEGACY_SOLUTION = RESULT_DIR / "latest_solution.json"
 LEGACY_PLOT_DIR = RESULT_DIR / "plots"
 
 # top-to-bottom order for the time-expanded plot (Earth cluster -> Moon cluster)
-NODE_ORDER = ["LEO", "GTO", "GEO", "EML1", "NRHO", "LLO", "Moon"]
+NODE_ORDER = ["GTO", "GEO", "EML1", "NRHO", "LLO", "Moon"]
 
 # 2-D positions for the network flow map
 NODE_POS = {
-    "LEO": (0.0, 0.0),
     "GTO": (1.2, 1.0),
     "GEO": (1.2, -1.0),
     "EML1": (3.0, 0.0),
@@ -124,7 +123,7 @@ def plot_flow_over_time(solution, plot_dir, filename="flow_over_time.png"):
     if not flows:
         return None
 
-    # Earth-nearest (LEO) at the bottom, Moon at the top
+    # Earth-nearest orbit at the bottom, Moon at the top
     y = {node: idx for idx, node in enumerate(nodes)}
 
     # number of vehicles on each move arc/time (model tracks counts, not identities)
@@ -351,8 +350,8 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
     if not relevant_nodes:
         return None
 
-    nodes = [node for node in NODE_ORDER if node in relevant_nodes and node != "LEO"]
-    nodes += sorted(relevant_nodes - set(nodes) - {"LEO"})
+    nodes = [node for node in NODE_ORDER if node in relevant_nodes]
+    nodes += sorted(relevant_nodes - set(nodes))
     lane_spacing = 1.25
     deploy_y = 0.0
     y = {node: (index + 1) * lane_spacing for index, node in enumerate(nodes)}

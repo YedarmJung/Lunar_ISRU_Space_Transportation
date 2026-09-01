@@ -11,14 +11,10 @@
 #                                propellant/kg tank)
 #   - first_prop, first_Tank    : propellant / tank *mass* [kg]
 #
-# transfer_cost[node] approximates the un-modeled cost of *delivering* 1 kg of
-# hardware/propellant from Earth to that node. Initial infrastructure delivery
-# uses its destination value; later RT-carried infrastructure uses the GTO value,
-# because GTO-to-destination transport is endogenous in model.py. It is estimated as
-#       transfer_cost[node] = launch_to_LEO * exp(dV_LEO->node / (Isp*g0))
-# i.e. the $5,000/kg launch cost times the propellant mass ratio needed to push
-# 1 kg from LEO to the node (Isp = 420 s, g0 = 9.80665e-3 km/s^2, so
-# Isp*g0 = 4.1188 km/s).  LEO itself is just the launch cost.
+# transfer_cost[node] approximates the un-modeled cost of delivering 1 kg of
+# hardware/propellant from Earth directly to that node. Initial infrastructure
+# delivery uses its destination value; later RT-carried infrastructure uses the
+# GTO value because GTO-to-destination transport is endogenous in model.py.
 
 BUILD_COST = {
     # ---- Facility build cost (Gkaravela: ISRU manufacturing $10,000/kg mass)
@@ -53,11 +49,10 @@ BUILD_COST = {
     "Ini_Hw_per_kg": 0.0,
 
     # ---- Delivery cost from Earth to each node [$/kg]
-    # LEO/GTO/GEO/Moon anchored to Bennett & Dempster (2020) / Kornuta (2019).
+    # GTO/GEO/Moon anchored to Bennett & Dempster (2020) / Kornuta (2019).
     # EML1/NRHO/LLO have no direct literature value; estimated to sit between GEO
     # ($16k) and the lunar surface ($35k), increasing with depth in the well.
     "transfer_cost": {
-        "LEO": 4_000.0,     # launch to LEO                    [Bennett/Kornuta]
         "GTO": 8_000.0,     # ~$8k/kg to GTO                   [Bennett/Kornuta]
         "GEO": 16_000.0,    # ~$16k/kg to GEO                  [Bennett/Kornuta]
         "EML1": 12_000.0,   # cislunar hub                     [estimate]

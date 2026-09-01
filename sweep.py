@@ -88,7 +88,7 @@ def run_one(years, annual_t_here, period_days):
     _breakdown, amort = build_cost_breakdown(data, var, years)
     ss, seam = data.mission["steady_start"], data.mission["seam"]
     ep_steady = sum(var["earth_prop"][n, t].X
-                    for n in ["LEO", "Moon"] for t in range(ss, seam))
+                    for n in ["GTO", "Moon"] for t in range(ss, seam))
     tank_mass = sum(var["Storage_H2O"][p].X + var["Storage_Prop"][p].X
                     for p in data.depot_node)
     # lunar propellant produced by DWE in the steady block (same rate constants as model.py)

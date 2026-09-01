@@ -7,7 +7,7 @@
 
 ## 1. 연구 질문
 
-> **LEO→GEO로 payload를 나르는 재사용 OTV의 추진제를, (A) 지구에서 올려 공급하는 게 싼가, (B) 달 ISRU 물에서 만든 추진제를 궤도 depot으로 공급하는 게 싼가?**
+> **GTO→GEO로 payload를 나르는 재사용 OTV의 추진제를, (A) 지구에서 올려 공급하는 게 싼가, (B) 달 ISRU 물에서 만든 추진제를 궤도 depot으로 공급하는 게 싼가?**
 
 핵심 산출물:
 - **GEO 인도 kg당 비용** `cost_per_kg`
@@ -15,7 +15,7 @@
 - **미션기간 민감도**: 긴 미션일수록 ISRU 초기투자가 상각되어 유리
 - (확장) concentrated vs distributed ISRU, depot 위치/개수
 
-기반: **Gkaravela et al.** 의 time-expanded multicommodity network flow + economies-of-scale ISRU logistics MILP. 이를 LEO-GEO OTV 추진제 공급 문제로 특화.
+기반: **Gkaravela et al.** 의 time-expanded multicommodity network flow + economies-of-scale ISRU logistics MILP. 이를 GTO-GEO OTV 추진제 공급 문제로 특화.
 
 ---
 
@@ -23,7 +23,7 @@
 
 1. **Payload ≠ Propellant.** GEO로 보내는 화물(위성부품·hydrazine·서비스킷 등)은 전부 `PL`. 달 ISRU는 그 화물을 나르는 **차량의 연료**(`Prop`)만 공급한다. (달이 hydrazine을 만드는 게 아님.)
 2. **OTV ≠ RT(Resource Tanker).**
-   - **OTV**: LEO→GEO payload 운송(고객측). 달 노드(`Moon`,`LLO`)에는 못 감.
+   - **OTV**: GTO→GEO payload 운송(고객측). 달 노드(`Moon`,`LLO`)에는 못 감.
    - **RT**: 달/궤도에서 depot으로 물·추진제 운반(공급측).
 3. **시간축 포함 (time-expanded).** depot/탱크의 의미는 공급 타이밍과 수요 타이밍의 차이를 흡수하는 buffer에서 나온다. 저장(Storage)이 없으면 물자 보관/전달 불가.
 4. **정상상태 window + 상각 (이 저장소의 최신 방식).** 전체 미션(수년)을 통째로 시뮬하지 않고, 주기적 운영의 **짧은 대표 window**만 풀고 임의 미션기간 `H`로 **상각(amortize)** 한다. (§8에서 상술 — 이 부분이 예전 계획문서와 가장 다름.)
@@ -35,10 +35,10 @@
 
 ### 3.1 Nodes (`data.py: get_data`)
 ```
-LEO, GEO, GTO, EML1, NRHO, LLO, Moon        # 7개
+GEO, GTO, EML1, NRHO, LLO, Moon             # 6개
 LUNAR_NODES = {Moon, LLO}                    # OTV 진입 금지 (model.py)
 ```
-별도 "Earth" 노드는 없다. 지구 공급은 `LEO`/`Moon` 노드에 **`earth_prop` 주입 + `transfer_cost`(배송비)** 로 표현.
+별도 "Earth" 노드는 없다. 지구 공급은 `GTO`/`Moon` 노드에 **`earth_prop` 주입 + `transfer_cost`(배송비)** 로 표현.
 
 ### 3.2 Depot 후보 (`depot_node`)
 ```
@@ -73,7 +73,7 @@ PL, H2O, Prop, H2O_Tank, Prop_Tank          # 5개
 | `q[e]` | 연속 ≥0 | 플랜트 규모 [kg] (`Moon_SWE` + 각 depot DWE) |
 | `q_operation[e,t]` | 연속 ≥0 | 시점 `t`에 가동한 플랜트 질량 (≤ `q[e]`) |
 | `Storage_H2O[p]`, `Storage_Prop[p]` | 연속 ≥0 | depot 물/추진제 **탱크 질량** [kg] |
-| `earth_prop[node,t]` | 연속 ≥0 | 지구 추진제 주입량 (`LEO`,`Moon`; **`t<seam`에서만**) — §8 |
+| `earth_prop[node,t]` | 연속 ≥0 | 지구 추진제 주입량 (`GTO`,`Moon`) |
 | `first_Tank[H2O/Prop]` | 연속 ≥0 | RT 탱크 초기 배치량 (`Moon`, t=0) |
 
 `arc_type = [OTV, RT, hold]`. `x`는 **출발량**, `xm`은 **도착량**이라는 구분이 중요(추진제는 비행 중 연소로 줄어듦).
@@ -123,7 +123,7 @@ obj = obj_swe + obj_dwe + obj_storage + obj_spacecraft + obj_maint + obj_earth
 2. **질량 균형** (각 `k,i,t`, **free disposal `≤`**):
    `outflow(x 출발) − inflow(xm 도착) ≤ rhs`, 여기서
    - `rhs = d_it[k,i,t]` (외생 수요/공급, `build_dit`)
-   - `+ earth_prop[i,t]` if `k=Prop, i∈{LEO,Moon}, t<seam` (지구연료 주입)
+   - `+ earth_prop[i,t]` if `k=Prop, i∈{GTO,Moon}` (지구연료 주입)
    - `+ first_Tank[k]` if `t=0, i=Moon`
    - **SWE 생산** (i=Moon, k=H2O): `+ 0.02917·(3/2.5)·days · q_operation[Moon_SWE,t]`
    - **DWE 변환** (i∈depot): 물 소비 `− dwe_rate·q_op` (k=H2O), 추진제 생산 `+ (2/3)·dwe_rate·q_op` (k=Prop);
@@ -131,9 +131,9 @@ obj = obj_swe + obj_dwe + obj_storage + obj_spacecraft + obj_maint + obj_earth
 3. **동시성/용량** (각 아크·시점):
    - OTV: `x[PL] ≤ 40000·y`, `x[Prop] ≤ 40000·y`
    - RT: `Σ실은것 ≤ 40000·y`; `x[Prop] ≤ 40000·y + 1.478·x[Prop_Tank]`; `x[H2O] ≤ 40·x[H2O_Tank]`
-   - 저장 hold: `x[H2O,hold] ≤ 40·Storage_H2O[node]`, `x[Prop,hold] ≤ 1.478·Storage_Prop[node]` (LEO 저장 무제한)
+   - 저장 hold: `x[H2O,hold] ≤ 40·Storage_H2O[node]`, `x[Prop,hold] ≤ 1.478·Storage_Prop[node]`
 4. **ISRU 가동한계**: `q_operation[e,t] ≤ q[e]`.
-5. **차량 수 보존** (`≥`, free disposal): `arrive + init ≥ depart`, `init = N_sc[v]` at INIT_NODE(OTV→LEO, RT→Moon) at t=0.
+5. **차량 수 보존** (`≥`, free disposal): `arrive + init ≥ depart`, `init = N_sc[v]` at INIT_NODE(OTV→GTO, RT→Moon) at t=0.
 6. **정상상태 seam glue** (§8): `x[c,v,a,ss−j]==x[c,v,a,se−j]`, `y[v,a,ss−j]==y[v,a,se−j]`, `j=0..τ−1`.
 7. **설치 Big-M**: `q[e] ≤ BIG_M·(SWE 또는 DWE[e])`.
 
@@ -155,7 +155,7 @@ setup(4스텝) | roll-in(1주기) | 정상상태(n_steady=2주기) | seam | tail
 ```
 - `setup_steps`, `period_steps`, `steady_start=ss`, `seam=se`, `n_rollin`, `n_steady`, `n_pulses` 는 `mission` dict에 저장.
 - `T = seam + MAX_TAU + 1`. `mission_years`는 **T를 결정하지 않고** 상각 지평 `H`로만 쓰인다.
-- GEO 수요는 `build_dit`가 정확히 `n_pulses`개 생성(펄스: `setup, setup+P, …`), LEO 공급은 `lead` 스텝 전에.
+- GEO 수요는 `build_dit`가 정확히 `n_pulses`개 생성(펄스: `setup, setup+P, …`), GTO 공급은 `lead` 스텝 전에.
 
 ### 8.2 왜 이렇게? — 두 가지 필수 장치
 1. **지구연료 = recurring source.** 예전엔 `first_prop`로 t=0에 한 번에 주입 → opex 분리 불가. 지금은 `earth_prop[node,t]` 매 스텝 구매.
@@ -182,7 +182,7 @@ setup(4스텝) | roll-in(1주기) | 정상상태(n_steady=2주기) | seam | tail
 ## 9. 비용 계수 (`build_cost.py`)
 
 ```
-transfer_cost[$/kg]: LEO 4,000 · GTO 8,040 · GEO 16,000 · EML1 20,000 · NRHO 24,000 · LLO 28,000 · Moon 35,000
+transfer_cost[$/kg]: GTO 8,000 · GEO 16,000 · EML1 12,000 · NRHO 12,000 · LLO 13,500 · Moon 36,000
   (Bennett/Kornuta 앵커, EML1/NRHO/LLO는 GEO~Moon 사이 추정)
 SWE/DWE_per_capacity: 10,000 $/kg (Gkaravela)
 ISRU_maint_frac_per_yr: 0.05,  ISRU_spares_cost_per_kg: 10,000
@@ -200,7 +200,7 @@ Ini_Prop_per_kg: 1.045 $/kg  ((5.5·0.15+5.97)/6.5, LO2/LH2 5.5:1)
 data.py          get_data(mission_years, days_per_step, n_rollin=1, n_steady=2) -> NetworkData
                    · nodes/commodities/arcs/vehicles/mission/depot_node
                    · amort_factor(mission, H) -> (AMORT, periods_H)
-build_dit.py     build_dit(data) -> d_it{(k,i,t):값}   (GEO 수요 sink, LEO 공급 source, n_pulses개)
+build_dit.py     build_dit(data) -> d_it{(k,i,t):값}   (GEO 수요 sink, GTO 공급 source, n_pulses개)
 build_Q.py       build_Q(data) -> Q[v][a][row][col]    (로켓방정식 전이행렬)
 build_cost.py    BUILD_COST 딕셔너리 (위 계수)
 model.py         build_and_solve(data, gurobi_params, horizon_years) -> (m, variables)

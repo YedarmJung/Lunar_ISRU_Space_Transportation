@@ -125,7 +125,7 @@ def get_data(profile_path):
     """Build the full-horizon network from an explicit payload-demand profile."""
     profile = _load_demand_profile(profile_path)
 
-    nodes = ["LEO", "GEO", "GTO", "EML1", "NRHO", "LLO", "Moon"]
+    nodes = ["GEO", "GTO", "EML1", "NRHO", "LLO", "Moon"]
     commodities = ["PL", "H2O", "Prop", "H2O_Tank", "Prop_Tank", "Infra"]
     depot_node = ["Moon", "GEO", "GTO", "EML1", "NRHO", "LLO"]
 
@@ -177,13 +177,6 @@ def get_data(profile_path):
     all_hold_times = periods(T, tau=1)
     for node in nodes:
         arcs.append(Arc(node, node, 1, "hold", all_hold_times, 0))
-
-    add_two_way(arcs, "LEO", "GEO", 1, periods(T, 1), delta_v_km_s=4.33)
-    add_two_way(arcs, "LEO", "GTO", 1, periods(T, 1), delta_v_km_s=2.86)
-    add_two_way(arcs, "LEO", "EML1", 1, periods(T, 1), delta_v_km_s=3.77)
-    add_two_way(arcs, "LEO", "NRHO", 1, periods(T, 1), delta_v_km_s=3.6)
-    add_two_way(arcs, "LEO", "LLO", 1, periods(T, 1), delta_v_km_s=4.04)
-    add_two_way(arcs, "LEO", "Moon", 1, periods(T, 1), delta_v_km_s=5.93)
 
     add_two_way(arcs, "GEO", "GTO", 1, periods(T, 1), delta_v_km_s=1.47)
     add_two_way(arcs, "GEO", "EML1", 1, periods(T, 1), delta_v_km_s=1.38)

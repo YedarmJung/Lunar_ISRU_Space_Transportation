@@ -41,8 +41,6 @@ def build_model(data, gurobi_params=None):
     installation_step_to_year = {
         year * steps_in_year: year for year in range(1, mission_years)
     }
-    # One GTO resupply opportunity half a year before each post-initial
-    # installation boundary. Year 0 facilities are intentionally predeployed.
     resupply_lead_steps = steps_in_year // 2
     infra_supply_time_by_year = {
         year: year * steps_in_year - resupply_lead_steps
@@ -102,11 +100,8 @@ def build_model(data, gurobi_params=None):
                     arc_components = ["H2O", "Prop", "H2O_Tank", "Prop_Tank","Infra"]
 
                 elif v == "hold":
-                    if arc.tail == "LEO":
-                        arc_components = ["PL"]
-                    else:
-                        arc_components = ["PL", "H2O", "Prop",
-                                        "H2O_Tank", "Prop_Tank","Infra"]
+                    arc_components = ["PL", "H2O", "Prop",
+                                    "H2O_Tank", "Prop_Tank","Infra"]
 
             for c in arc_components:
                 for t in arc.active_times:
@@ -130,7 +125,7 @@ def build_model(data, gurobi_params=None):
                 spacecraft_index.append((v, a, t))
     y = m.addVars(spacecraft_index, lb=0, ub=5, vtype=GRB.INTEGER, name="y")
 
-    # New vehicles deployed at the start of each mission year.
+    # 각 년도에 새로 배치될 vehicles
     N_sc = m.addVars(
         ["OTV", "RT"], year_indices, lb=0, ub=5, vtype=GRB.INTEGER, name="N_sc"
     )
@@ -149,14 +144,15 @@ def build_model(data, gurobi_params=None):
     q = m.addVars(E, year_indices, lb=0, name="q") #DWE, SWE 사이징
     q_operation = m.addVars(E,range(T), lb=0, name="q_operation")
 
-    # Earth-supplied propellant can enter at any point in the full mission.
+    # 지구 보급 연료
     earth_prop = m.addVars(["GTO", "Moon"], range(T), lb=0, name="earth_prop")
+
+    #지구 보급 탱크
     first_Tank = m.addVars(
         ["H2O_Tank", "Prop_Tank"], year_indices, lb=0, name="first_tank"
     )
-    # Actual infrastructure mass launched from Earth into GTO. The upper bound
-    # preserves the previous 100 t per-window resupply limit while making the
-    # used quantity explicit and chargeable.
+
+    #인프라 지구 추가 보급
     infra_supply = m.addVars(
         infra_supply_times,
         lb=0,
@@ -169,8 +165,7 @@ def build_model(data, gurobi_params=None):
     # Facility build cost
     # ------------------------------------------------------------
 
-    # Manufacturing is charged once on the final installed stock. Initial
-    # facilities are predeployed, so only their destination delivery is added.
+    #총 제작 코스트 + 첫 배치 코스트
     obj_swe = (
         bc["SWE_fixed"] * SWE
         + bc["SWE_per_capacity"] * q["Moon_SWE", final_year]
@@ -183,8 +178,7 @@ def build_model(data, gurobi_params=None):
         for p in E_Depot
     )
 
-    # Storage follows the same rule: final stock is manufactured once, while
-    # only the initial stock receives the direct-to-destination delivery charge.
+
     obj_storage = gp.quicksum(
         bc["Storage_H2O_per_kg"] * Storage_H2O[p, final_year]
         + bc["transfer_cost"][p] * Storage_H2O[p, 0]
@@ -193,14 +187,12 @@ def build_model(data, gurobi_params=None):
         for p in E_Depot
     )
 
-    # Post-initial additions enter at GTO. Their manufacturing cost is already
-    # included in the final-stock terms above, so only GTO delivery is added here.
+    #추가 인프라 GTO 보내는 비용
     obj_infra_to_gto = bc["transfer_cost"]["GTO"] * gp.quicksum(
         infra_supply[t] for t in infra_supply_times
     )
 
     # Every annual vehicle/tank addition pays manufacturing and deployment;
-    # otherwise later infrastructure transport could use free RT additions.
     obj_tank = (
     # Initial H2O tank: manufacturing + direct Moon delivery
         (
@@ -312,8 +304,7 @@ def build_model(data, gurobi_params=None):
     '''-----------------------Constraints-----------------------'''
 
     # The GTO payload in each resupply window is exactly the dry mass installed
-    # at the following annual boundary. This ties the generic Infra flow back to
-    # its asset-specific manufacturing quantities and makes the 100 t cap real.
+    
     for year, supply_time in infra_supply_time_by_year.items():
         previous_year = year - 1
         installed_mass = (
@@ -399,8 +390,8 @@ def build_model(data, gurobi_params=None):
                     elif k == "Prop":
                         rhs += PROP_PER_H2O * dwe_rate * q_operation[i, t]
 
-                # Annual additions. Year 0 assets are intentionally already in
-                # place, so only years 1..Y-1 consume transported infrastructure.
+                # 첫 년도는 이미 배치 되어있는걸로
+                # 그 이후엔 GTO로 페이로드 공급
                 installation_year = installation_step_to_year.get(t)
                 if installation_year is not None:
                     if i == "Moon" and k in ("H2O_Tank", "Prop_Tank"):
@@ -510,10 +501,6 @@ def build_model(data, gurobi_params=None):
             if arc.kind == "hold":
                 node = arc.tail  # hold arc: tail == head
 
-                # LEO: concurrency 없음
-                if node == "LEO":
-                    continue
-
                 # depot/Moon: storage 사이징 변수로 상한
                 if node in E_Depot:
                     # H2O 저장 <= Storage_H2O[node]
@@ -570,23 +557,16 @@ def build_model(data, gurobi_params=None):
                 m.addConstr(arrive + init == depart,
                             name=f"veh_cons_{v}_{i}_{t}")
 
-     #------------------------q<=My------------------------
-    # Big-M bounds ISRU plant mass: never larger than what is needed to make the
-    # whole mission's propellant on the Moon.  Derived from total payload demand
-    # (propellant scales with payload) and DAYS_PER_STEP, so it stays valid AND
-    # reasonably tight across the demand-density sweep -- a fixed constant would
-    # be too small at high demand and silently cut optimal solutions.
+
     total_pl_demand = sum(
         event["mass_kg"] for event in mission["demand_events"]
     )
     op_days = max(1, data.mission["mission_days"])
     swe_rate = 0.02917 * 2 / 1.5    # kg water / day per kg SWE (linear productivity)
-    # assume up to ~40 kg propellant produced per kg payload (delivered prop plus
-    # lunar climb-out overhead), water:propellant ~ 1:1.
+
     BIG_M = max(30000.0, 40.0 * total_pl_demand / (swe_rate * op_days))
 
-    # q and storage are installed stocks. Nondecreasing constraints make their
-    # annual differences valid nonnegative infrastructure additions.
+
     for e in E:
         for year in range(1, mission_years):
             m.addConstr(

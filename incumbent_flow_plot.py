@@ -127,6 +127,8 @@ class IncumbentFlowPlotter:
                     "arc": arc_id,
                     "tail": arc.tail,
                     "head": arc.head,
+                    "kind": arc.kind,
+                    "tau": arc.tau,
                     "time": time,
                     "arrival_time": time + arc.tau,
                     "count": int(round(value)),

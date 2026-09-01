@@ -61,7 +61,6 @@ plt.rcParams.update({
 
 # node layout mimicking the cislunar schematic (Earth left, Moon right)
 NODE_POS = {
-    "LEO": (1.00, -0.15),
     "GTO": (2.10, 1.00),
     "GEO": (2.90, -1.40),
     "EML1": (5.50, -0.50),
@@ -71,7 +70,7 @@ NODE_POS = {
 }
 EARTH_C, EARTH_R = (-0.65, 0.0), 1.15
 MOON_C, MOON_R = (7.70, -0.60), 0.72
-NODE_ORDER = ["LEO", "GTO", "GEO", "EML1", "NRHO", "LLO", "Moon"]
+NODE_ORDER = ["GTO", "GEO", "EML1", "NRHO", "LLO", "Moon"]
 
 COMMODITY_COLOR = {"Prop": C_BLUE, "H2O": C_AQUA, "PL": C_ORANGE}
 
@@ -145,7 +144,7 @@ def draw_basemap(ax, edges, label_size=9, node_size=14):
         ax.plot([xa, xb], [ya, yb], color="#cccccc", linewidth=0.8, zorder=1)
 
     label_off = {"GEO": (0, -13), "EML1": (0, -13), "Moon": (16, -13),
-                 "LLO": (-15, 5), "NRHO": (0, 7), "GTO": (0, 7), "LEO": (-6, 7)}
+                 "LLO": (-15, 5), "NRHO": (0, 7), "GTO": (0, 7)}
     for node, (x, y) in NODE_POS.items():
         ax.scatter([x], [y], s=node_size, color="#333333", zorder=6)
         dx, dy = label_off[node]
@@ -334,7 +333,7 @@ def _case_axis(df):
 def plot_facility_heatmap(df, sols, period):
     """df must already be filtered to a single period."""
     cases, labels, groups = _case_axis(df)
-    nodes = NODE_ORDER[::-1]  # Moon top row, LEO bottom row
+    nodes = NODE_ORDER[::-1]  # Moon top row, GTO bottom row
 
     panels = [
         ("DWE capacity (t)", lambda v: v.get("DWE", 0.0)),
@@ -397,7 +396,7 @@ def plot_depot_ranking(df, sols):
                 freq["sto"][node] += 1
                 cap["sto"][node].append(sto)
 
-    ypos = np.arange(len(nodes))  # LEO bottom, Moon top
+    ypos = np.arange(len(nodes))  # GTO bottom, Moon top
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.5, 4.2), sharey=True)
 
     h = 0.38

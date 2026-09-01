@@ -1,6 +1,7 @@
 import json
 import math
 import shutil
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -16,14 +17,14 @@ RESULT_DIR = Path("results")
 DEMAND_PROFILE_PATH = Path("inputs") / "demand_10yr_ramp_20to100t.json"
 # Point this at a .mst produced by make_warm_start.py to warm start the solve.
 # Leave it as None to start from scratch.
-WARM_START_PATH = Path("results/plots_20260821_135402/start.mst")
+WARM_START_PATH = Path("results/plots_20260828_161439/start.mst")
 GUROBI_PARAMS = {
     "TimeLimit": 14 * 3600,
     "MIPGap": 0.025,
     "MIPFocus": 3,
-    "Cuts": 3,
+    "Cuts": 2,
     "Symmetry": 2,
-    "Heuristics": 0.005,
+    "Heuristics": 0.05,
     "Presolve" : 2,
 }
 
@@ -147,6 +148,8 @@ def build_solution(data, model, variables):
                 "arc": arc_id,
                 "tail": arc.tail,
                 "head": arc.head,
+                "kind": arc.kind,
+                "tau": arc.tau,
                 "time": time,
                 "arrival_time": time + arc.tau,
                 "count": int(round(count)),
@@ -427,7 +430,12 @@ def _load_warm_start(model, run_dir):
         )
 
     model.update()
-    model.read(str(start_path))
+    # Gurobi on Windows may reject paths containing non-ASCII characters.
+    # Let Python copy the file to an ASCII-only temporary path first.
+    with tempfile.TemporaryDirectory(prefix="gurobi_mst_") as temp_dir:
+        temp_start = Path(temp_dir) / "start.mst"
+        shutil.copyfile(start_path, temp_start)
+        model.read(str(temp_start))
     shutil.copy2(start_path, run_dir / start_path.name)
     print(f"Warm start: {start_path}")
 
