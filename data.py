@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
 
+from units import kg_to_tonnes
+
 
 @dataclass(frozen=True)
 class Arc:
@@ -14,7 +16,7 @@ class Arc:
     kind: str  # "move" or "hold"
     active_times: Tuple[int, ...]
     delta_v_km_s: Optional[float] = None
-    cost: float = 0.0
+    cost_musd: float = 0.0
 
 
 @dataclass
@@ -111,7 +113,8 @@ def _load_demand_profile(profile_path):
                 "demand_step": demand_step,
                 "supply_day": max(0, demand_day - lead_days),
                 "supply_step": max(0, demand_step - lead_days // days_per_step),
-                "mass_kg": float(mass_kg),
+                # The source schema is kg; the model boundary is metric tonnes.
+                "mass_t": kg_to_tonnes(mass_kg),
             }
         )
 
@@ -136,9 +139,9 @@ def get_data(profile_path):
     mission_steps = mission_days // days_per_step
     T = mission_steps + 1
 
-    demand_by_year_kg = {
+    demand_by_year_t = {
         str(year): sum(
-            event["mass_kg"] for event in profile["events"] if event["year"] == year
+            event["mass_t"] for event in profile["events"] if event["year"] == year
         )
         for year in range(1, mission_years + 1)
     }
@@ -153,21 +156,21 @@ def get_data(profile_path):
         "payload_lead_days": int(profile["payload_lead_days"]),
         "PL_supply_lead": int(profile["payload_lead_days"]) // days_per_step,
         "demand_events": profile["events"],
-        "demand_by_year_kg": demand_by_year_kg,
-        "total_payload_kg": sum(event["mass_kg"] for event in profile["events"]),
+        "demand_by_year_t": demand_by_year_t,
+        "total_payload_t": sum(event["mass_t"] for event in profile["events"]),
     }
 
     vehicles = {
         "OTV": {
-            "payload_cap": 18500.0,
-            "propellant_cap": 14000.0,
-            "dry_mass": 2500.0,
+            "payload_cap_t": 18.5,
+            "propellant_cap_t": 14.0,
+            "dry_mass_t": 2.5,
             "isp_s": 420,
         },
         "RT": {
-            "payload_cap": 30000.0,
-            "propellant_cap": 20000.0,
-            "dry_mass": 4000.0,
+            "payload_cap_t": 30.0,
+            "propellant_cap_t": 20.0,
+            "dry_mass_t": 4.0,
             "isp_s": 420.0,
         },
     }

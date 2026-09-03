@@ -7,7 +7,7 @@ from build_dit import build_dit
 from build_cost import BUILD_COST as bc
 
 
-INFRA_RESUPPLY_CAP_KG = 100_000.0
+INFRA_RESUPPLY_CAP_T = 100.0
 FLEET_CAP = {"OTV": 1, "RT": 2}
 
 def steps_per_year(data):
@@ -156,7 +156,7 @@ def build_model(data, gurobi_params=None):
     infra_supply = m.addVars(
         infra_supply_times,
         lb=0,
-        ub=INFRA_RESUPPLY_CAP_KG,
+        ub=INFRA_RESUPPLY_CAP_T,
         name="infra_supply_GTO",
     )
 
@@ -167,28 +167,28 @@ def build_model(data, gurobi_params=None):
 
     #총 제작 코스트 + 첫 배치 코스트
     obj_swe = (
-        bc["SWE_fixed"] * SWE
-        + bc["SWE_per_capacity"] * q["Moon_SWE", final_year]
-        + bc["transfer_cost"]["Moon"] * q["Moon_SWE", 0]
+        bc["SWE_fixed_musd"] * SWE
+        + bc["SWE_musd_per_t"] * q["Moon_SWE", final_year]
+        + bc["transfer_musd_per_t"]["Moon"] * q["Moon_SWE", 0]
     )
     obj_dwe = gp.quicksum(
-        bc["DWE_fixed"] * DWE[p]
-        + bc["DWE_per_capacity"] * q[p, final_year]
-        + bc["transfer_cost"][p] * q[p, 0]
+        bc["DWE_fixed_musd"] * DWE[p]
+        + bc["DWE_musd_per_t"] * q[p, final_year]
+        + bc["transfer_musd_per_t"][p] * q[p, 0]
         for p in E_Depot
     )
 
 
     obj_storage = gp.quicksum(
-        bc["Storage_H2O_per_kg"] * Storage_H2O[p, final_year]
-        + bc["transfer_cost"][p] * Storage_H2O[p, 0]
-        + bc["Storage_Prop_per_kg"] * Storage_Prop[p, final_year]
-        + bc["transfer_cost"][p] * Storage_Prop[p, 0]
+        bc["Storage_H2O_musd_per_t"] * Storage_H2O[p, final_year]
+        + bc["transfer_musd_per_t"][p] * Storage_H2O[p, 0]
+        + bc["Storage_Prop_musd_per_t"] * Storage_Prop[p, final_year]
+        + bc["transfer_musd_per_t"][p] * Storage_Prop[p, 0]
         for p in E_Depot
     )
 
     #추가 인프라 GTO 보내는 비용
-    obj_infra_to_gto = bc["transfer_cost"]["GTO"] * gp.quicksum(
+    obj_infra_to_gto = bc["transfer_musd_per_t"]["GTO"] * gp.quicksum(
         infra_supply[t] for t in infra_supply_times
     )
 
@@ -196,25 +196,25 @@ def build_model(data, gurobi_params=None):
     obj_tank = (
     # Initial H2O tank: manufacturing + direct Moon delivery
         (
-            bc["Storage_H2O_per_kg"]
-            + bc["transfer_cost"]["Moon"]
+            bc["Storage_H2O_musd_per_t"]
+            + bc["transfer_musd_per_t"]["Moon"]
         )
         * first_Tank["H2O_Tank", 0]
 
         # Initial propellant tank: manufacturing + direct Moon delivery
         + (
-            bc["Storage_Prop_per_kg"]
-            + bc["transfer_cost"]["Moon"]
+            bc["Storage_Prop_musd_per_t"]
+            + bc["transfer_musd_per_t"]["Moon"]
         )
         * first_Tank["Prop_Tank", 0]
 
         # Later tanks: manufacturing only.
         # GTO delivery is already charged through obj_infra_to_gto.
         + gp.quicksum(
-            bc["Storage_H2O_per_kg"]
+            bc["Storage_H2O_musd_per_t"]
             * first_Tank["H2O_Tank", year]
 
-            + bc["Storage_Prop_per_kg"]
+            + bc["Storage_Prop_musd_per_t"]
             * first_Tank["Prop_Tank", year]
 
             for year in range(1, mission_years)
@@ -225,9 +225,9 @@ def build_model(data, gurobi_params=None):
     # All OTVs are externally delivered to GTO
         gp.quicksum(
             (
-                bc["OTV_unit"]
-                + bc["transfer_cost"]["GTO"]
-                * vehicles["OTV"]["dry_mass"]
+                bc["OTV_unit_musd"]
+                + bc["transfer_musd_per_t"]["GTO"]
+                * vehicles["OTV"]["dry_mass_t"]
             )
             * N_sc["OTV", year]
             for year in year_indices
@@ -235,18 +235,18 @@ def build_model(data, gurobi_params=None):
 
         # Initial RT is predeployed at Moon
         + (
-            bc["RT_unit"]
-            + bc["transfer_cost"]["Moon"]
-            * vehicles["RT"]["dry_mass"]
+            bc["RT_unit_musd"]
+            + bc["transfer_musd_per_t"]["Moon"]
+            * vehicles["RT"]["dry_mass_t"]
         )
         * N_sc["RT", 0]
 
         # Later RTs are delivered to GTO
         + gp.quicksum(
             (
-                bc["RT_unit"]
-                + bc["transfer_cost"]["GTO"]
-                * vehicles["RT"]["dry_mass"]
+                bc["RT_unit_musd"]
+                + bc["transfer_musd_per_t"]["GTO"]
+                * vehicles["RT"]["dry_mass_t"]
             )
             * N_sc["RT", year]
             for year in range(1, mission_years)
@@ -258,31 +258,32 @@ def build_model(data, gurobi_params=None):
     # Maintenance is charged on the stock that actually exists in each year.
     # A facility installed in year y therefore pays maintenance only from y on.
     obj_maint = bc["ISRU_maint_frac_per_yr"] * gp.quicksum(
-        (bc["ISRU_spares_cost_per_kg"] + bc["transfer_cost"]["Moon"])
+        (bc["ISRU_spares_musd_per_t"] + bc["transfer_musd_per_t"]["Moon"])
         * q["Moon_SWE", year]
         + gp.quicksum(
-            (bc["ISRU_spares_cost_per_kg"] + bc["transfer_cost"][p])
+            (bc["ISRU_spares_musd_per_t"] + bc["transfer_musd_per_t"][p])
             * q[p, year]
             for p in E_Depot
         )
         for year in year_indices
     )
 
-    # Every kilogram of Earth-supplied propellant is charged exactly once.
+    # Every tonne of Earth-supplied propellant is charged exactly once.
     obj_earth_prop = gp.quicksum(
-        (bc["Ini_Prop_per_kg"] + bc["transfer_cost"][node]) * earth_prop[node, t]
+        (bc["initial_prop_musd_per_t"] + bc["transfer_musd_per_t"][node])
+        * earth_prop[node, t]
         for node in ["GTO", "Moon"] for t in range(T)
     )
 
     # Rejecting a satellite is penalized by the cost of loading the additional
     # Earth-supplied propellant its payload would require for GTO -> GEO.
 
-    unserved_penalty_per_kg = 0.92 * (
-        bc["Ini_Prop_per_kg"] + bc["transfer_cost"]["GTO"]
+    unserved_penalty_musd_per_t = 0.92 * (
+        bc["initial_prop_musd_per_t"] + bc["transfer_musd_per_t"]["GTO"]
     )
     obj_unserved_penalty = gp.quicksum(
-        event["mass_kg"]
-        * unserved_penalty_per_kg
+        event["mass_t"]
+        * unserved_penalty_musd_per_t
         * (1 - service[event["year"], event["event_id"]])
         for event in mission["demand_events"]
     )
@@ -425,8 +426,8 @@ def build_model(data, gurobi_params=None):
                 m.addConstr(outflow - inflow <= rhs, name=f"mass[{k},{i},{t}]")
 
     #----------------------------concurrency----------------------------
-    H2O_TANK_RATIO = 40.0      # kg H2O per kg H2O tank (Gkaravela)
-    PROP_TANK_RATIO = 1.478    # kg propellant per kg prop tank (Gkaravela)
+    H2O_TANK_RATIO = 40.0      # t H2O per t H2O tank (dimensionless ratio)
+    PROP_TANK_RATIO = 1.478    # t propellant per t prop tank (dimensionless ratio)
 
     for a, arc in enumerate(arcs):
         for t in arc.active_times:
@@ -439,14 +440,14 @@ def build_model(data, gurobi_params=None):
             if ("PL", "OTV", a, t) in x and ("OTV", a, t) in y:
                 m.addConstr(
                     x["PL", "OTV", a, t]
-                    <= vehicles["OTV"]["payload_cap"] * y["OTV", a, t],
+                    <= vehicles["OTV"]["payload_cap_t"] * y["OTV", a, t],
                     name=f"OTV_payload_a{a}_t{t}",
                 )
             # propellant: Prop <= propellant_cap * y[OTV,a,t]
             if ("Prop", "OTV", a, t) in x and ("OTV", a, t) in y:
                 m.addConstr(
                     x["Prop", "OTV", a, t]
-                    <= vehicles["OTV"]["propellant_cap"] * y["OTV", a, t],
+                    <= vehicles["OTV"]["propellant_cap_t"] * y["OTV", a, t],
                     name=f"OTV_prop_a{a}_t{t}",
                 )
 
@@ -461,14 +462,17 @@ def build_model(data, gurobi_params=None):
                 if total_terms:
                     m.addConstr(
                         gp.quicksum(total_terms)
-                        <= (vehicles["RT"]["payload_cap"]+vehicles["RT"]["propellant_cap"]) * y["RT", a, t],
+                        <= (
+                            vehicles["RT"]["payload_cap_t"]
+                            + vehicles["RT"]["propellant_cap_t"]
+                        ) * y["RT", a, t],
                         name=f"RT_totalmass_a{a}_t{t}",
                     )
 
                 # (2)+(4) 추진제 총량 <= 자기탱크 용량 + 운반탱크 용량
                 #   Prop <= propellant_cap * y + 1.478 * Prop_Tank
                 if ("Prop", "RT", a, t) in x:
-                    prop_cap_rhs = vehicles["RT"]["propellant_cap"] * y["RT", a, t]
+                    prop_cap_rhs = vehicles["RT"]["propellant_cap_t"] * y["RT", a, t]
                     if ("Prop_Tank", "RT", a, t) in x:
                         prop_cap_rhs += PROP_TANK_RATIO * x["Prop_Tank", "RT", a, t]
                     m.addConstr(
@@ -485,7 +489,7 @@ def build_model(data, gurobi_params=None):
                 if total_terms:
                     m.addConstr(
                         gp.quicksum(total_terms)
-                        <= vehicles["RT"]["payload_cap"] * y["RT", a, t],
+                        <= vehicles["RT"]["payload_cap_t"] * y["RT", a, t],
                         name=f"RT_payload_mass_a{a}_t{t}",
                     )
 
@@ -558,13 +562,13 @@ def build_model(data, gurobi_params=None):
                             name=f"veh_cons_{v}_{i}_{t}")
 
 
-    total_pl_demand = sum(
-        event["mass_kg"] for event in mission["demand_events"]
+    total_pl_demand_t = sum(
+        event["mass_t"] for event in mission["demand_events"]
     )
     op_days = max(1, data.mission["mission_days"])
-    swe_rate = 0.02917 * 2 / 1.5    # kg water / day per kg SWE (linear productivity)
+    swe_rate = 0.02917 * 2 / 1.5    # t water/day per t SWE (dimensionless mass ratio)
 
-    BIG_M = max(30000.0, 40.0 * total_pl_demand / (swe_rate * op_days))
+    BIG_M_T = max(30.0, 40.0 * total_pl_demand_t / (swe_rate * op_days))
 
 
     for e in E:
@@ -588,16 +592,16 @@ def build_model(data, gurobi_params=None):
     for e in E_SWE:
         for year in year_indices:
             m.addConstr(
-                q[e, year] <= BIG_M,
-                #q[e, year] <= BIG_M * SWE,
+                q[e, year] <= BIG_M_T,
+                #q[e, year] <= BIG_M_T * SWE,
                 name=f"install_SWE_{e}_{year}",
             )
 
     for e in E_Depot:
         for year in year_indices:
             m.addConstr(
-                q[e, year] <= BIG_M,
-                #q[e, year] <= BIG_M * DWE[e],
+                q[e, year] <= BIG_M_T,
+                #q[e, year] <= BIG_M_T * DWE[e],
                 name=f"install_DWE_{e}_{year}",
             )
 
@@ -616,7 +620,7 @@ def build_model(data, gurobi_params=None):
         "first_Tank": first_Tank,
         "infra_supply": infra_supply,
         "service": service,
-        "unserved_penalty_per_kg": unserved_penalty_per_kg,
+        "unserved_penalty_musd_per_t": unserved_penalty_musd_per_t,
         "cost_terms": cost_terms,
     }
     return m, variables

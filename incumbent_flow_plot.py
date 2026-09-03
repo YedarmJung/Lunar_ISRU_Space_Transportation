@@ -6,6 +6,7 @@ import time
 from gurobipy import GRB
 
 from post_process import generate_flow_plot
+from units import MODEL_UNITS, SOLUTION_SCHEMA_VERSION
 
 
 TOL = 1e-6
@@ -82,7 +83,7 @@ class IncumbentFlowPlotter:
                 "plot_title": (
                     "Commodity flow over time — "
                     f"incumbent at {elapsed_hours} h "
-                    f"(objective {snapshot['objective']:,.0f})"
+                    f"(objective {snapshot['objective_musd']:,.3f} MUSD)"
                 ),
             }
             filename = f"flow_over_time_incumbent_{elapsed_hours:02d}h.png"
@@ -148,7 +149,9 @@ class IncumbentFlowPlotter:
         ]
 
         return {
-            "objective": objective,
+            "schema_version": SOLUTION_SCHEMA_VERSION,
+            "units": MODEL_UNITS,
+            "objective_musd": objective,
             "T": self.data.T,
             "nodes": self.data.nodes,
             "commodities": self.data.commodities,

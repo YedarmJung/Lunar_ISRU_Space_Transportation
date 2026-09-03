@@ -39,6 +39,6 @@ def build_Q(data):
                         if col != "Prop":
                             Q[v][a]["Prop"][col] = -alpha
 
-                    Q[v][a]["Prop"][v] = -alpha * data.vehicles[v]["dry_mass"]
+                    Q[v][a]["Prop"][v] = -alpha * data.vehicles[v]["dry_mass_t"]
 
     return Q

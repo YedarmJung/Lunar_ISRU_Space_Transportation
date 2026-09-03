@@ -2,6 +2,8 @@ import json
 import math
 from pathlib import Path
 
+from units import MODEL_UNITS, SOLUTION_SCHEMA_VERSION
+
 
 RESULT_DIR = Path("results")
 LEGACY_SOLUTION = RESULT_DIR / "latest_solution.json"
@@ -21,6 +23,7 @@ NODE_POS = {
 }
 
 TOL = 1e-6
+MIN_FLOW_T = 0.001  # 1 kg, expressed in the model's tonne unit
 COST_COLORS = {
     "SWE": "#4C78A8",
     "DWE": "#F58518",
@@ -66,6 +69,7 @@ def generate_plots(solution_path=None, plot_dir=None):
 
     with solution_path.open("r", encoding="utf-8") as f:
         solution = json.load(f)
+    _require_canonical_units(solution)
 
     makers = [
         plot_flow_over_time,
@@ -97,11 +101,26 @@ def _load_matplotlib():
 
 def generate_flow_plot(solution, plot_dir, filename="flow_over_time.png"):
     """Generate only the time-expanded flow plot from an in-memory solution."""
+    _require_canonical_units(solution)
     _load_matplotlib()
     plot_dir = Path(plot_dir)
     plot_dir.mkdir(parents=True, exist_ok=True)
     path = plot_flow_over_time(solution, plot_dir, filename=filename)
     return str(path) if path is not None else None
+
+
+def _require_canonical_units(solution):
+    """Fail clearly instead of silently plotting a legacy kg/USD solution."""
+    if solution.get("schema_version") != SOLUTION_SCHEMA_VERSION:
+        raise ValueError(
+            "Solution uses a legacy unit schema. Re-run the optimizer to create "
+            "a schema-v2 solution in t and MUSD before plotting it."
+        )
+    if solution.get("units") != MODEL_UNITS:
+        raise ValueError(
+            f"Unexpected solution units: {solution.get('units')!r}; "
+            f"expected {MODEL_UNITS!r}."
+        )
 
 
 def _ordered_nodes(nodes):
@@ -118,8 +137,7 @@ def plot_flow_over_time(solution, plot_dir, filename="flow_over_time.png"):
     nodes = _ordered_nodes(solution["nodes"])
     # include BOTH move and hold arcs (hold = inventory sitting at a node);
     # drop near-zero numerical-noise flows (loose-gap artifacts) so phantom routes vanish.
-    MIN_KG = 1.0
-    flows = [f for f in solution["flows"] if f["departed"] > MIN_KG]
+    flows = [f for f in solution["flows"] if f["departed"] > MIN_FLOW_T]
     if not flows:
         return None
 
@@ -202,10 +220,10 @@ def plot_flow_over_time(solution, plot_dir, filename="flow_over_time.png"):
         (event["year"], event["event_id"]): event["served"]
         for event in solution.get("satellite_service", [])
     }
-    max_mass = max((event["mass_kg"] for event in events), default=1.0)
+    max_mass = max((event["mass_t"] for event in events), default=1.0)
     if "GEO" in y:
         for event in events:
-            size = 140 + 300 * event["mass_kg"] / max_mass
+            size = 140 + 300 * event["mass_t"] / max_mass
             served = service_by_event.get(
                 (event["year"], event["event_id"]), True
             )
@@ -221,7 +239,7 @@ def plot_flow_over_time(solution, plot_dir, filename="flow_over_time.png"):
                 (event["year"], event["event_id"]), True
             ):
                 continue
-            size = 140 + 300 * event["mass_kg"] / max_mass
+            size = 140 + 300 * event["mass_t"] / max_mass
             ax.scatter(event["supply_step"], y["GTO"], marker="*", s=size, color="gold",
                        edgecolor="black", linewidth=0.6, zorder=6)
 
@@ -330,7 +348,7 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
 
     infra_flows = [
         flow for flow in solution.get("flows", [])
-        if flow["commodity"] == "Infra" and flow["departed"] > 1.0
+        if flow["commodity"] == "Infra" and flow["departed"] > MIN_FLOW_T
     ]
     fleet_additions = solution.get("fleet_additions_by_year", {})
     supply_by_time = (
@@ -363,8 +381,8 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
         for value in values
         if value > TOL
     ]
-    max_stock = max(all_stock_values, default=1.0)
-    max_addition = 1.0
+    max_stock = max(all_stock_values, default=MIN_FLOW_T)
+    max_addition = MIN_FLOW_T
     additions = {}
     addition_breakdown = {}
     for node, categories in stock.items():
@@ -385,7 +403,7 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
     for key, breakdown in portable_tank_additions.items():
         addition_breakdown.setdefault(key, {}).update(breakdown)
         additions[key] = additions.get(key, 0.0) + sum(breakdown.values())
-    max_addition = max([1.0, *additions.values()])
+    max_addition = max([MIN_FLOW_T, *additions.values()])
 
     fig, ax = plt.subplots(figsize=(18, 10))
     ax.axhline(deploy_y, color="0.78", lw=0.8, zorder=0)
@@ -413,7 +431,9 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
                     solid_capstyle="butt", zorder=2,
                 )
 
-    max_flow = max((flow["departed"] for flow in infra_flows), default=1.0)
+    max_flow = max(
+        (flow["departed"] for flow in infra_flows), default=MIN_FLOW_T
+    )
     # Held infrastructure stays visible but subdued behind actual move arcs.
     for flow in infra_flows:
         if flow["kind"] != "hold":
@@ -455,9 +475,9 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
         label_offset = 0.12 if label_index % 2 == 0 else -0.12
         ax.text(
             midpoint_x + 0.12, midpoint_y + label_offset,
-            f"{flow['departed'] / 1000:.1f} t"
-            if flow["departed"] >= 10000
-            else f"{flow['departed'] / 1000:.2f} t",
+            f"{flow['departed']:.1f} t"
+            if flow["departed"] >= 10.0
+            else f"{flow['departed']:.2f} t",
             fontsize=7, color="0.12", ha="left",
             va="bottom" if label_offset > 0 else "top",
             bbox={"boxstyle": "round,pad=0.12", "fc": "white",
@@ -480,7 +500,7 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
                 zorder=4,
             )
             ax.text(
-                time - 0.82, deploy_y - 0.08, f"Infra {mass / 1000:.2f} t",
+                time - 0.82, deploy_y - 0.08, f"Infra {mass:.2f} t",
                 fontsize=7, color="darkgoldenrod", ha="right", va="top",
             )
 
@@ -526,7 +546,7 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
             edgecolor="0.12", linewidth=1.0, zorder=8,
         )
         if is_initial:
-            label = f"initial {mass / 1000:.2f} t"
+            label = f"initial {mass:.2f} t"
         else:
             short_name = {
                 "SWE": "SWE",
@@ -537,10 +557,10 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
                 "Portable Prop tank": "Portable Prop",
             }
             detail = "\n".join(
-                f"{short_name[category]} {value / 1000:.2f} t"
+                f"{short_name[category]} {value:.2f} t"
                 for category, value in addition_breakdown[node, year_index].items()
             )
-            label = f"+{mass / 1000:.2f} t\n{detail}"
+            label = f"+{mass:.2f} t\n{detail}"
         ax.annotate(
             label, (time, y[node]),
             xytext=(4, 7), textcoords="offset points",
@@ -553,7 +573,7 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
     summary_x = T - 1 + 2.5
     for node, categories in stock.items():
         parts = [
-            f"{category} {values[-1] / 1000:.2f} t"
+            f"{category} {values[-1]:.2f} t"
             for category, values in categories.items()
             if values[-1] > TOL
         ]
@@ -654,7 +674,7 @@ def plot_network_flow_map(solution, plot_dir):
             zorder=2,
         )
         ax.text(
-            (x0 + x1) / 2, (y0 + y1) / 2, _kg(value),
+            (x0 + x1) / 2, (y0 + y1) / 2, _tonnes(value),
             fontsize=7, ha="center", va="center",
             bbox={"boxstyle": "round,pad=0.18", "fc": "white", "ec": "0.85", "alpha": 0.85},
             zorder=4,
@@ -705,7 +725,7 @@ def plot_cost_breakdown(solution, plot_dir):
     summary_keys = {"total", "physical_total", "objective_total"}
     costs = {
         name: value
-        for name, value in solution["cost_breakdown"].items()
+        for name, value in solution["cost_breakdown_musd"].items()
         if name not in summary_keys and abs(value) > TOL
     }
     if not costs:
@@ -716,11 +736,11 @@ def plot_cost_breakdown(solution, plot_dir):
 
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.bar(range(len(labels)), values, color="slateblue")
-    objective_total = solution["cost_breakdown"].get(
-        "objective_total", solution["cost_breakdown"]["total"]
+    objective_total = solution["cost_breakdown_musd"].get(
+        "objective_total", solution["cost_breakdown_musd"]["total"]
     )
     ax.set_title(f"Objective cost breakdown (total = {_money(objective_total)})")
-    ax.set_ylabel("cost [$]")
+    ax.set_ylabel("cost [MUSD]")
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=25, ha="right")
     ax.grid(axis="y", color="0.9")
@@ -735,7 +755,7 @@ def plot_cost_breakdown(solution, plot_dir):
 
 
 def plot_cost_share(solution, plot_dir):
-    breakdown = solution.get("cost_breakdown", {})
+    breakdown = solution.get("cost_breakdown_musd", {})
     costs = {
         "SWE": breakdown.get("SWE", 0.0),
         "DWE": breakdown.get("DWE", 0.0),
@@ -798,16 +818,16 @@ def plot_demand_profile(solution, plot_dir):
     days_per_year = mission["days_per_year"]
     mission_years = mission["mission_years"]
     event_year = [event["demand_day"] / days_per_year for event in events]
-    event_tonnes = [event["mass_kg"] / 1000.0 for event in events]
+    event_tonnes = [event["mass_t"] for event in events]
     served = [event.get("served", True) for event in events]
     candidate_annual_tonnes = [
-        mission["demand_by_year_kg"].get(str(year), 0.0) / 1000.0
+        mission["demand_by_year_t"].get(str(year), 0.0)
         for year in range(1, mission_years + 1)
     ]
     served_annual_tonnes = [
-        solution.get("lifecycle", {}).get("demand_by_year_kg", {}).get(
-            str(year), candidate_annual_tonnes[year - 1] * 1000.0
-        ) / 1000.0
+        solution.get("lifecycle", {}).get("demand_by_year_t", {}).get(
+            str(year), candidate_annual_tonnes[year - 1]
+        )
         for year in range(1, mission_years + 1)
     ]
 
@@ -877,7 +897,7 @@ def plot_infrastructure(solution, plot_dir):
     fig, ax = plt.subplots(figsize=(max(9, 0.5 * len(labels)), 5))
     ax.bar(range(len(labels)), values, color=colors)
     ax.set_title("Selected infrastructure mass")
-    ax.set_ylabel("mass [kg]")
+    ax.set_ylabel("mass [t]")
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
     ax.grid(axis="y", color="0.9")
@@ -918,7 +938,7 @@ def plot_production(solution, plot_dir):
     ax.set_xlabel(
         f"mission year (time step = {mission['days_per_step']} days)"
     )
-    ax.set_ylabel("operated plant mass [kg]")
+    ax.set_ylabel("operated plant mass [t]")
     ax.legend(fontsize=8, ncol=min(4, len(facilities)))
     ax.grid(color="0.92")
     fig.tight_layout()
@@ -929,22 +949,18 @@ def plot_production(solution, plot_dir):
     return path
 
 
-def _kg(value):
-    if abs(value) >= 1_000_000:
-        return f"{value / 1_000_000:.1f}M"
-    if abs(value) >= 1_000:
-        return f"{value / 1_000:.1f}k"
-    return f"{value:.0f}"
+def _tonnes(value):
+    if abs(value) >= 100.0:
+        return f"{value:,.0f} t"
+    if abs(value) >= 10.0:
+        return f"{value:,.1f} t"
+    return f"{value:,.2f} t"
 
 
 def _money(value):
-    if abs(value) >= 1_000_000_000:
-        return f"${value / 1_000_000_000:.2f}B"
-    if abs(value) >= 1_000_000:
-        return f"${value / 1_000_000:.1f}M"
-    if abs(value) >= 1_000:
-        return f"${value / 1_000:.1f}k"
-    return f"${value:.0f}"
+    if abs(value) >= 1.0:
+        return f"{value:,.1f} MUSD"
+    return f"{value:,.3f} MUSD"
 
 
 if __name__ == "__main__":

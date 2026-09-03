@@ -11,7 +11,7 @@ Figures
 3. facility_heatmap.png      : DWE / storage capacity per node per case
 4. depot_ranking.png         : which node is selected how often / how big
 5. capacity_vs_demand.png    : installed capacity trends vs demand
-6. cost_breakdown_perkg.png  : $/kg cost composition per case
+6. cost_breakdown_musd_per_t.png : MUSD/t cost composition per case
 """
 
 import json
@@ -32,7 +32,7 @@ SWEEP_DIR = Path("results") / "sweep"
 CASE_DIR = SWEEP_DIR / "cases"
 OUT_DIR = SWEEP_DIR / "plots_new"
 
-TOL = 1.0  # kg; below this treated as numerical noise
+TOL = 0.001  # t (1 kg); below this treated as numerical noise
 
 # ---------------------------------------------------------------- style ----
 C_BLUE = "#2a78d6"    # DWE / Prop
@@ -88,7 +88,7 @@ def load_cases():
 
 
 def facility_table(sol):
-    """Return {node: {"SWE": q, "DWE": q, "sto_Prop": kg, "sto_H2O": kg}} (kg)."""
+    """Return per-node SWE, DWE, and tank masses in metric tonnes."""
     out = {n: defaultdict(float) for n in NODE_ORDER}
     swe = sol["facilities"]["SWE"]
     if swe.get("installed") and swe["q"] > TOL:
@@ -97,14 +97,15 @@ def facility_table(sol):
         if info.get("installed") and info["q"] > TOL:
             out[node]["DWE"] = info["q"]
     for node, comms in sol.get("storage", {}).items():
-        for comm, cap in comms.items():
+        for comm in ("H2O", "Prop"):
+            cap = float(comms.get(comm, 0.0))
             if cap > TOL:
                 out[node][f"sto_{comm}"] = cap
     return out
 
 
 def aggregate_flows(sol):
-    """Sum departed mass on move arcs -> {(tail, head, commodity): kg}."""
+    """Sum departed mass on move arcs in metric tonnes."""
     agg = defaultdict(float)
     for fl in sol["flows"]:
         if fl["kind"] == "hold" or fl["tail"] == fl["head"]:
@@ -155,10 +156,10 @@ def draw_basemap(ax, edges, label_size=9, node_size=14):
                     color="#222222", zorder=7)
 
 
-def glyph_area(kg, kg_max, max_area=2400.0, min_area=60.0):
-    if kg <= TOL:
+def glyph_area(mass_t, max_mass_t, max_area=2400.0, min_area=60.0):
+    if mass_t <= TOL:
         return 0.0
-    return min_area + (max_area - min_area) * kg / kg_max
+    return min_area + (max_area - min_area) * mass_t / max_mass_t
 
 
 def draw_facilities(ax, fac, scale_max, area_scale=1.0):
@@ -203,12 +204,12 @@ def facility_legend_handles(short=False):
 def draw_flows(ax, agg, flow_max):
     """Curved arrows per (tail, head, commodity); width ~ sqrt(mass)."""
     rad_by_comm = {"Prop": 0.18, "H2O": -0.18, "PL": 0.34}
-    for (tail, head, comm), kg in sorted(agg.items(), key=lambda kv: -kv[1]):
+    for (tail, head, comm), mass_t in sorted(agg.items(), key=lambda kv: -kv[1]):
         color = COMMODITY_COLOR.get(comm)
         if color is None:  # tanks etc. -> skip (small logistics returns)
             continue
         p0, p1 = np.array(NODE_POS[tail]), np.array(NODE_POS[head])
-        lw = 0.6 + 5.5 * math.sqrt(kg / flow_max)
+        lw = 0.6 + 5.5 * math.sqrt(mass_t / flow_max)
         arrow = FancyArrowPatch(
             p0, p1, connectionstyle=f"arc3,rad={rad_by_comm[comm]}",
             arrowstyle="-|>", mutation_scale=8 + 2.2 * lw,
@@ -223,8 +224,8 @@ def plot_case_maps(df, sols):
     out.mkdir(parents=True, exist_ok=True)
 
     # shared scales so maps are comparable across cases
-    scale_max = {"SWE": 1.0, "DWE": 1.0, "sto": 1.0}
-    flow_max = 1.0
+    scale_max = {"SWE": TOL, "DWE": TOL, "sto": TOL}
+    flow_max = TOL
     for sol in sols.values():
         fac = facility_table(sol)
         for vals in fac.values():
@@ -262,7 +263,7 @@ def plot_case_maps(df, sols):
             f"{int(row['mission_years'])}-yr horizon, "
             f"{int(row['demand_t_yr'])} t/yr GEO demand, "
             f"{int(row['period_days'])}d cadence   "
-            f"(cost {row['cost_per_kg']:,.0f} $/kg, "
+            f"(cost {row['cost_musd_per_t']:,.3f} MUSD/t, "
             f"lunar prop share {1 - row['earth_frac']:.0%})",
             fontsize=11)
         fig.tight_layout()
@@ -278,7 +279,7 @@ def plot_map_grid(df, sols, period):
     years = sorted(df["mission_years"].unique())
     demands = sorted(df["demand_t_yr"].unique())
 
-    scale_max = {"SWE": 1.0, "DWE": 1.0, "sto": 1.0}
+    scale_max = {"SWE": TOL, "DWE": TOL, "sto": TOL}
     for sol in sols.values():
         for vals in facility_table(sol).values():
             scale_max["SWE"] = max(scale_max["SWE"], vals.get("SWE", 0.0))
@@ -347,7 +348,7 @@ def plot_facility_heatmap(df, sols, period):
         for j, case in enumerate(cases):
             fac = facility_table(sols[case])
             for i, node in enumerate(nodes):
-                M[i, j] = getter(fac[node]) / 1000.0
+                M[i, j] = getter(fac[node])
         vmax = M.max() if M.max() > 0 else 1.0
         im = ax.imshow(M, aspect="auto", cmap="Blues", vmin=0, vmax=vmax)
         ax.set_yticks(range(len(nodes)), nodes, fontsize=9)
@@ -411,7 +412,7 @@ def plot_depot_ranking(df, sols):
     ax1.set_xlim(0, 105)
 
     def _mean(vals):
-        return np.mean(vals) / 1000.0 if vals else 0.0
+        return np.mean(vals) if vals else 0.0
 
     ax2.barh(ypos + h / 2, [_mean(cap["DWE"][n]) for n in nodes],
              height=h, color=C_BLUE)
@@ -450,7 +451,7 @@ def plot_capacity_vs_demand(df, sols):
                          & (df["period_days"] == p_days)].sort_values("demand_t_yr")
                 if sub.empty:
                     continue
-                vals = [getter(facility_table(sols[c])) / 1000.0 for c in sub["case"]]
+                vals = [getter(facility_table(sols[c])) for c in sub["case"]]
                 ax.plot(sub["demand_t_yr"], vals, marker=HORIZON_MARKERS[y],
                         markersize=5, linewidth=2, alpha=0.85,
                         color=HORIZON_COLORS[y], linestyle=period_linestyle(p_days))
@@ -480,10 +481,15 @@ def plot_cost_breakdown(df, sols, period):
         ("SWE", lambda cb: cb["SWE"], C_GREEN),
         ("DWE", lambda cb: cb["DWE"], C_BLUE),
         ("Storage", lambda cb: cb["storage"], C_YELLOW),
+        (
+            "Infrastructure to GTO",
+            lambda cb: cb["infrastructure_to_GTO"],
+            C_AQUA,
+        ),
         ("Spacecraft", lambda cb: cb["spacecraft"], C_VIOLET),
-        ("Earth prop (setup)", lambda cb: cb["earth_prop_ramp"] + cb["earth_prop_tail"], C_RED),
-        ("Earth prop (ops)", lambda cb: cb["earth_prop_over_H"], C_ORANGE),
-        ("Maintenance", lambda cb: cb["maintenance_over_H"], C_GRAY),
+        ("Earth propellant", lambda cb: cb["earth_prop"], C_RED),
+        ("Maintenance", lambda cb: cb["maintenance"], C_GRAY),
+        ("Unserved penalty", lambda cb: cb["unserved_penalty"], C_ORANGE),
     ]
     fig, axes = plt.subplots(1, len(years), figsize=(3.1 * len(years), 4.0),
                              sharey=True)
@@ -493,24 +499,24 @@ def plot_cost_breakdown(df, sols, period):
         bottom = np.zeros(len(sub))
         for label, getter, color in comps:
             vals = np.array([
-                getter(sols[c]["cost_breakdown"]) / p
-                for c, p in zip(sub["case"], sub["total_payload_kg"])])
-            ax.bar(x, vals / 1000.0, bottom=bottom / 1000.0, color=color,
+                getter(sols[c]["cost_breakdown_musd"]) / p
+                for c, p in zip(sub["case"], sub["total_payload_t"])])
+            ax.bar(x, vals, bottom=bottom, color=color,
                    width=0.7, label=label, edgecolor="white", linewidth=0.5)
             bottom += vals
         for xi, tot in zip(x, bottom):
-            ax.text(xi, tot / 1000.0 + 0.4, f"{tot / 1000.0:.1f}",
+            ax.text(xi, tot + 0.4, f"{tot:.2f}",
                     ha="center", fontsize=8)
         ax.set_xticks(x, [f"{int(d)}" for d in sub["demand_t_yr"]])
         ax.set_title(f"{int(y)}-yr horizon", fontsize=10)
         ax.set_xlabel("demand (t/yr)")
         ax.grid(axis="x", visible=False)
-    axes[0].set_ylabel("cost per delivered kg (k$/kg)")
+    axes[0].set_ylabel("cost per delivered tonne [MUSD/t]")
     axes[-1].legend(frameon=False, fontsize=8, loc="upper right")
-    fig.suptitle(f"Cost composition per delivered kg  ({int(period)}d cadence)",
+    fig.suptitle(f"Cost composition per delivered tonne ({int(period)}d cadence)",
                  fontsize=13)
     fig.tight_layout(rect=(0, 0, 1, 0.93))
-    p = OUT_DIR / f"cost_breakdown_perkg_p{int(period)}.png"
+    p = OUT_DIR / f"cost_breakdown_musd_per_t_p{int(period)}.png"
     fig.savefig(p, bbox_inches="tight")
     plt.close(fig)
     return p

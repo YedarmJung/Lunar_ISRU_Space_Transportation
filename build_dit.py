@@ -7,7 +7,7 @@ def build_dit(data, service):
     d = {}
     for event in data.mission["demand_events"]:
         event_key = (event["year"], event["event_id"])
-        selected_mass = event["mass_kg"] * service[event_key]
+        selected_mass = event["mass_t"] * service[event_key]
         demand_key = ("PL", "GEO", event["demand_step"])
         supply_key = ("PL", "GTO", event["supply_step"])
         d[demand_key] = d.get(demand_key, 0.0) - selected_mass

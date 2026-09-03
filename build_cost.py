@@ -1,63 +1,54 @@
 # build_cost.py
 #
-# Cost coefficients.  Values are taken from Gkaravela et al. (Table 3 and the
-# ISRU sizing/cost section) wherever available; derived/estimated values are
-# tagged in the comments.
+# Model cost coefficients. Source values are kept visibly in their published
+# USD or USD/kg form and converted here to the model's canonical MUSD and
+# MUSD/metric-tonne units. This avoids hand-conversion errors while keeping the
+# literature values auditable.
 #
 # Unit conventions assumed by model.py:
-#   - q[facility, year]         : cumulative ISRU *structure mass* [kg]
-#   - Storage_*[node, year]     : cumulative *tank mass* [kg] (tank ratios live
-#                                in model.py: 40 kg H2O/kg tank and 1.478 kg
-#                                propellant/kg tank)
-#   - first_prop, first_Tank    : propellant / tank *mass* [kg]
-#
-# transfer_cost[node] approximates the un-modeled cost of delivering 1 kg of
-# hardware/propellant from Earth directly to that node. Initial infrastructure
-# delivery uses its destination value; later RT-carried infrastructure uses the
-# GTO value because GTO-to-destination transport is endogenous in model.py.
+#   - q[facility, year]         : cumulative ISRU structure mass [t]
+#   - Storage_*[node, year]     : cumulative tank mass [t]
+#   - first_Tank                : tank mass [t]
+#   - transfer_musd_per_t[node] : Earth-to-node delivery cost [MUSD/t]
+
+from units import usd_per_kg_to_musd_per_t, usd_to_musd
+
 
 BUILD_COST = {
-    # ---- Facility build cost (Gkaravela: ISRU manufacturing $10,000/kg mass)
-    # NOTE: fixed terms are 0 in this linear phase; the piecewise economies-of-
-    # scale fixed intercept comes later (Gkaravela Eq. 40, first (0,1000] block).
-    "SWE_fixed": 0.0,
-    "SWE_per_capacity": 10_000.0,   # $/kg SWE structure mass  [Gkaravela]
+    # Facility build cost (Gkaravela: ISRU manufacturing 10,000 USD/kg).
+    # Fixed terms are zero in this linear phase.
+    "SWE_fixed_musd": usd_to_musd(0.0),
+    "SWE_musd_per_t": usd_per_kg_to_musd_per_t(10_000.0),
 
-    "DWE_fixed": 0.0,
-    "DWE_per_capacity": 10_000.0,   # $/kg DWE structure mass  [Gkaravela]
+    "DWE_fixed_musd": usd_to_musd(0.0),
+    "DWE_musd_per_t": usd_per_kg_to_musd_per_t(10_000.0),
 
-    # ---- ISRU maintenance (Gkaravela Table 3: spares = 5% plant mass / year,
-    # manufactured at $10,000/kg; delivery to the plant node is added in model.py)
-    "ISRU_maint_frac_per_yr": 0.05,   # spares fraction of plant mass per year
-    "ISRU_spares_cost_per_kg": 10_000.0,
+    # Spares = 5% of plant mass/year, manufactured at 10,000 USD/kg.
+    "ISRU_maint_frac_per_yr": 0.05,
+    "ISRU_spares_musd_per_t": usd_per_kg_to_musd_per_t(10_000.0),
 
-    # ---- Storage tank cost (Gkaravela Table 3)
-    "Storage_H2O_per_kg": 800.0,    # $/kg water tank mass      [Gkaravela]
-    "Storage_Prop_per_kg": 1_869.0, # $/kg cryo prop tank mass  [Gkaravela]
+    # Storage tank manufacturing costs (Gkaravela Table 3).
+    "Storage_H2O_musd_per_t": usd_per_kg_to_musd_per_t(800.0),
+    "Storage_Prop_musd_per_t": usd_per_kg_to_musd_per_t(1_869.0),
 
-    # ---- Spacecraft manufacturing cost (Gkaravela Table 3: $150M each)
-    "OTV_unit": 110_000_000.0,      # $/OTV   [Gkaravela]
-    "OTV_unit": 30_000_000.0,      # $/OTV   [Helios]
-    "RT_unit": 150_000_000.0,       # $/RT    [Gkaravela]
+    # Spacecraft manufacturing costs. The effective pre-migration OTV value
+    # was 30M USD (Helios); the duplicate 110M USD entry was shadowed.
+    "OTV_unit_musd": usd_to_musd(30_000_000.0),
+    "RT_unit_musd": usd_to_musd(150_000_000.0),
 
-    # ---- Initial deployment propellant material cost
-    # LO2/LH2 blended at 5.5:1 mixture ratio (Gkaravela Table 3:
-    # LO2 $0.15/kg, LH2 $5.97/kg) -> (5.5*0.15 + 5.97)/6.5 = $1.045/kg.
-    "Ini_Prop_per_kg": 1.045,       # $/kg propellant material  [Gkaravela]
+    # LO2/LH2 blended material cost: 1.045 USD/kg.
+    "initial_prop_musd_per_t": usd_per_kg_to_musd_per_t(1.045),
 
-    # Optional: hardware deployment cost if you want to penalize Hw directly.
-    "Ini_Hw_per_kg": 0.0,
+    # Optional hardware material cost; currently inactive.
+    "initial_hw_musd_per_t": usd_per_kg_to_musd_per_t(0.0),
 
-    # ---- Delivery cost from Earth to each node [$/kg]
-    # GTO/GEO/Moon anchored to Bennett & Dempster (2020) / Kornuta (2019).
-    # EML1/NRHO/LLO have no direct literature value; estimated to sit between GEO
-    # ($16k) and the lunar surface ($35k), increasing with depth in the well.
-    "transfer_cost": {
-        "GTO": 8_000.0,     # ~$8k/kg to GTO                   [Bennett/Kornuta]
-        "GEO": 16_000.0,    # ~$16k/kg to GEO                  [Bennett/Kornuta]
-        "EML1": 12_000.0,   # cislunar hub                     [estimate]
-        "NRHO": 12_000.0,   # lunar halo orbit                 [estimate]
-        "LLO": 13_500.0,    # low lunar orbit (near surface)   [estimate]
-        "Moon": 36_000.0,   # transport to lunar pole          [Bennett/Kornuta]
+    # Earth-to-node delivery cost [MUSD/t].
+    "transfer_musd_per_t": {
+        "GTO": usd_per_kg_to_musd_per_t(8_000.0),
+        "GEO": usd_per_kg_to_musd_per_t(16_000.0),
+        "EML1": usd_per_kg_to_musd_per_t(12_000.0),
+        "NRHO": usd_per_kg_to_musd_per_t(12_000.0),
+        "LLO": usd_per_kg_to_musd_per_t(13_500.0),
+        "Moon": usd_per_kg_to_musd_per_t(36_000.0),
     },
 }

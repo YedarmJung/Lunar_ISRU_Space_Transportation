@@ -2,8 +2,8 @@
 
 Reads every row written so far by sweep.py (deduped by case tag -- latest wins),
 then draws:
-  (1) cost/kg vs demand           (one line per year,cadence)
-  (2) cost/kg & tank mass vs cadence   (the cadence study)
+  (1) MUSD/t vs demand           (one line per year,cadence)
+  (2) MUSD/t & tank mass vs cadence   (the cadence study)
   (3) lunar-vs-Earth map over demand x cadence  (one panel per year)
 
 Run anytime -- even if the sweep was done in several separate batches, this plots
@@ -47,15 +47,15 @@ def load_feasible(csv_path=CSV_PATH):
             "mission_years": _f(r.get("mission_years")),
             "demand_t_yr": _f(r.get("demand_t_yr")),
             "period_days": _f(r.get("period_days")),
-            "cost_per_kg": _f(r.get("cost_per_kg")),
-            "tank_mass": _f(r.get("tank_mass")),
+            "cost_musd_per_t": _f(r.get("cost_musd_per_t")),
+            "tank_mass_t": _f(r.get("tank_mass_t")),
             "SWE_q": _f(r.get("SWE_q")),
-            "earth_prop_kg": _f(r.get("earth_prop_kg")),
-            "lunar_prop_kg": _f(r.get("lunar_prop_kg")),
+            "earth_prop_t": _f(r.get("earth_prop_t")),
+            "lunar_prop_t": _f(r.get("lunar_prop_t")),
             "earth_frac": _f(r.get("earth_frac")),
             "lunar_used": str(r.get("lunar_used")).lower() == "true",
         })
-    return [p for p in pts if p["cost_per_kg"] is not None]
+    return [p for p in pts if p["cost_musd_per_t"] is not None]
 
 
 def plot_curves(pts):
@@ -72,29 +72,29 @@ def plot_curves(pts):
     for key in keys:
         yr, pd = key
         pr = sorted(groups[key], key=lambda r: r["demand_t_yr"])
-        ax.plot([r["demand_t_yr"] for r in pr], [r["cost_per_kg"] for r in pr],
+        ax.plot([r["demand_t_yr"] for r in pr], [r["cost_musd_per_t"] for r in pr],
                 marker="o", color=horizon_color(yr), linestyle=period_linestyle(pd),
                 label=f"{yr:g}yr, {pd:g}d")
         for r in pr:
             if r["lunar_used"]:
-                ax.scatter(r["demand_t_yr"], r["cost_per_kg"], s=150,
+                ax.scatter(r["demand_t_yr"], r["cost_musd_per_t"], s=150,
                            facecolors="none", edgecolors="seagreen", linewidths=1.8, zorder=3)
 
     ax.set_xscale("log")
     ax.set_xlabel("GEO payload demand [t/yr]")
-    ax.set_ylabel("cost per kg to GEO [$/kg]")
-    ax.set_title("Cost/kg vs demand")
+    ax.set_ylabel("cost per tonne to GEO [MUSD/t]")
+    ax.set_title("Cost per tonne vs demand")
     ax.grid(color="0.9", which="both")
     ax.legend(title="mission, cadence", fontsize=8, ncol=2)
     fig.tight_layout()
-    path = RESULT_DIR / "cost_per_kg_curves.png"
+    path = RESULT_DIR / "cost_musd_per_t_curves.png"
     fig.savefig(path, dpi=180)
     plt.close(fig)
     print(f"Saved {path}")
 
 
 def plot_cadence_effect(pts):
-    """cost/kg and depot tank mass vs demand cadence."""
+    """MUSD/t and depot tank mass vs demand cadence."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -111,19 +111,19 @@ def plot_cadence_effect(pts):
         pr = sorted(groups[key], key=lambda r: r["period_days"])
         color = cmap(i / max(1, len(keys) - 1))
         lbl = f"{yr:g}yr, {dt:g}t/yr"
-        ax1.plot([r["period_days"] for r in pr], [r["cost_per_kg"] for r in pr],
+        ax1.plot([r["period_days"] for r in pr], [r["cost_musd_per_t"] for r in pr],
                  "-o", color=color, label=lbl)
-        ax2.plot([r["period_days"] for r in pr], [r["tank_mass"] for r in pr],
+        ax2.plot([r["period_days"] for r in pr], [r["tank_mass_t"] for r in pr],
                  "-o", color=color, label=lbl)
 
     ax1.set_xlabel("demand cadence [days between pulses]")
-    ax1.set_ylabel("cost per kg to GEO [$/kg]")
-    ax1.set_title("Cost/kg vs cadence")
+    ax1.set_ylabel("cost per tonne to GEO [MUSD/t]")
+    ax1.set_title("Cost per tonne vs cadence")
     ax1.grid(color="0.92")
     ax1.legend(fontsize=7, ncol=2)
 
     ax2.set_xlabel("demand cadence [days between pulses]")
-    ax2.set_ylabel("total depot tank mass [kg]")
+    ax2.set_ylabel("total depot tank mass [t]")
     ax2.set_title("Depot tank mass vs cadence")
     ax2.grid(color="0.92")
 
@@ -138,7 +138,7 @@ def plot_earth_vs_lunar(pts):
     """How much of the propellant is still Earth-sourced despite lunar ISRU.
 
     Left: Earth propellant fraction = earth / (earth + lunar) [%] vs demand.
-    Right: absolute Earth vs lunar propellant per steady period [kg] vs demand.
+    Right: absolute Earth vs lunar propellant per steady period [t] vs demand.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -162,9 +162,9 @@ def plot_earth_vs_lunar(pts):
         ax1.plot([r["demand_t_yr"] for r in pr], [100 * r["earth_frac"] for r in pr],
                  marker="o", color=color, linestyle=ls, label=lbl)
         # absolute: Earth (filled circle) vs lunar (open square, faded)
-        ax2.plot([r["demand_t_yr"] for r in pr], [r["earth_prop_kg"] for r in pr],
+        ax2.plot([r["demand_t_yr"] for r in pr], [r["earth_prop_t"] for r in pr],
                  marker="o", color=color, linestyle=ls, label=f"{lbl} Earth")
-        ax2.plot([r["demand_t_yr"] for r in pr], [r["lunar_prop_kg"] for r in pr],
+        ax2.plot([r["demand_t_yr"] for r in pr], [r["lunar_prop_t"] for r in pr],
                  marker="s", markerfacecolor="none", color=color, linestyle=ls, alpha=0.5)
 
     ax1.axhline(50, ls=":", color="0.5", lw=1)
@@ -178,7 +178,7 @@ def plot_earth_vs_lunar(pts):
 
     ax2.set_xscale("log")
     ax2.set_xlabel("GEO payload demand [t/yr]")
-    ax2.set_ylabel("propellant per steady period [kg]")
+    ax2.set_ylabel("propellant per steady period [t]")
     ax2.set_title("Earth (filled ●) vs lunar (open □, faded) propellant")
     ax2.grid(color="0.92", which="both")
 

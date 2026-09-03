@@ -42,9 +42,9 @@ GUROBI_PARAMS = {
 TOL = 1e-6
 
 FIELDS = [
-    "case", "mission_years", "demand_t_yr", "period_days", "setup_days", "pulse_kg",
-    "objective", "gap", "total_payload_kg", "cost_per_kg", "OTV", "RT",
-    "SWE_q", "DWE_q", "tank_mass", "earth_prop_kg", "lunar_prop_kg", "earth_frac",
+    "case", "mission_years", "demand_t_yr", "period_days", "setup_days", "pulse_t",
+    "objective_musd", "gap", "total_payload_t", "cost_musd_per_t", "OTV", "RT",
+    "SWE_q", "DWE_q", "tank_mass_t", "earth_prop_t", "lunar_prop_t", "earth_frac",
     "lunar_used", "status", "feasible",
 ]
 
@@ -100,18 +100,18 @@ def run_one(years, annual_t_here, period_days):
     swe_q = var["q"]["Moon_SWE"].X
     return {
         **base,
-        "pulse_kg": round(data.mission["GEO_demand_PL_kg"]),
-        "objective": m.ObjVal,                                # = total(H)
+        "pulse_t": data.mission["GEO_demand_PL_t"],
+        "objective_musd": m.ObjVal,                           # = total(H) [MUSD]
         "gap": m.MIPGap,
-        "total_payload_kg": round(amort["pulse_kg"] * amort["periods_H"]),
-        "cost_per_kg": amort["cost_per_kg"],
+        "total_payload_t": amort["pulse_t"] * amort["periods_H"],
+        "cost_musd_per_t": amort["cost_musd_per_t"],
         "OTV": round(var["N_sc"]["OTV"].X),
         "RT": round(var["N_sc"]["RT"].X),
         "SWE_q": round(swe_q, 1),
         "DWE_q": round(sum(var["q"][p].X for p in data.depot_node), 1),
-        "tank_mass": round(tank_mass, 1),                     # depot 탱크 질량 합 (cadence 효과)
-        "earth_prop_kg": round(ep_steady),                    # 정상상태 블록당 지구연료
-        "lunar_prop_kg": round(lunar_prop),                   # 정상상태 블록당 달산 추진제
+        "tank_mass_t": round(tank_mass, 4),                   # depot 탱크 질량 합 [t]
+        "earth_prop_t": round(ep_steady, 4),                  # 정상상태 블록당 지구연료 [t]
+        "lunar_prop_t": round(lunar_prop, 4),                 # 정상상태 블록당 달산 추진제 [t]
         "earth_frac": round(earth_frac, 4) if earth_frac != "" else "",  # 지구연료 비율
         "lunar_used": swe_q > TOL,
         "status": int(m.Status),
@@ -131,8 +131,12 @@ def main():
                 r = run_one(years, annual_t, period_days)
                 append_row(r)          # ver_time_horizon: 케이스 끝나자마자 즉시 저장(누적)
                 if r.get("feasible"):
-                    print(f"  saved {r['case']}  cost/kg={r['cost_per_kg']:,.0f}  "
-                          f"lunar={r['lunar_used']}  tank={r['tank_mass']:,.0f}  gap={r['gap']:.1%}")
+                    print(
+                        f"  saved {r['case']}  "
+                        f"cost={r['cost_musd_per_t']:,.3f} MUSD/t  "
+                        f"lunar={r['lunar_used']}  "
+                        f"tank={r['tank_mass_t']:,.3f} t  gap={r['gap']:.1%}"
+                    )
                 else:
                     print(f"  {r['case']}: no feasible solution (status {r['status']})")
 

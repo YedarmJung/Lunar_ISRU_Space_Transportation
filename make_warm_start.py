@@ -212,7 +212,11 @@ def main():
 
     print(f"Solution : {solution_path}")
     print(f"Profile  : {profile_path}")
-    print(f"Objective: {solution.get('objective', float('nan')):,.0f}")
+    if "objective_musd" in solution:
+        print(f"Objective: {solution['objective_musd']:,.3f} MUSD")
+    else:
+        # Legacy kg/USD solutions remain valid integer-only warm-start sources.
+        print(f"Objective: {solution.get('objective', float('nan')):,.0f} USD")
 
     data = get_data(profile_path)
     if solution.get("T") not in (None, data.T):
