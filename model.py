@@ -304,7 +304,7 @@ def build_model(data, gurobi_params=None):
     '''-----------------------Constraints-----------------------'''
 
     # The GTO payload in each resupply window is exactly the dry mass installed
-    
+
     for year, supply_time in infra_supply_time_by_year.items():
         previous_year = year - 1
         installed_mass = (

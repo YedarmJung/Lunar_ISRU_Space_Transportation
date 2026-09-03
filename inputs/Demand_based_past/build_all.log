@@ -1,0 +1,849 @@
+
+========================================================================
+  7년치  2019 ~ 2025
+========================================================================
+
+--- make_geo_csv ---
+GEO 지향 발사 171 건 -> 페이로드 후보에서
+  최종목적지 GEO 아님 제외 : 17
+      S44482   TDO                        US      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=R)
+      S44493   Zhongxing 18               CN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+      S44049   B'reshit                   IL      심우주 이탈 (Status=DSO)
+      S44441   Chandrayaan-2              IN      심우주 이탈 (Status=DSO)
+      S45464   OrCa                       US      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=R)
+      S50505   GMM PN                     RU      로켓에서 분리 실패, 부착된 채 좌초 (Status=AR)
+      S47851   Shiyan 9                   CN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+      S48619   TDO 3                      US      TDO 3: MEO 캘리브레이션 타겟(20 kg), 재진입
+      S48620   TDO 4                      US      TDO 4: MEO 캘리브레이션 타겟(20 kg), 재진입
+      S57320   Chandrayaan-3              IN      심우주 이탈 (Status=DSA)
+      S57770   Chandrayaan-3 PM           IN      심우주 이탈 (Status=DSO)
+      S57754   Aditya-L1                  IN      심우주 이탈 (Status=DSO)
+      S59480   ADV.00.00.000-01           RU      GEO 미도달 후 재진입 (Status=R, OpOrbit=LLEO/I)
+      S59509   Gagarinets                 RU      GEO 미도달 후 재진입 (Status=R, OpOrbit=LLEO/I)
+      S62256   PROBA-3 CSC                I-ESA   PROBA-3 CSC: HEO 편대비행 미션, GEO 아님
+      S62258   PROBA-3 OSC                I-ESA   PROBA-3 OSC: HEO 편대비행 미션, GEO 아님
+      S62850   NVS-02                     IN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+  중국/러시아 제외         : 95
+  => geo_satellites_2019_2025.csv : 138 satellites
+
+year       n     mass_t      dry_t      tot_t
+2019      15       73.9       39.1       73.9
+2020      13       54.4       32.4       54.4
+2021      13       50.4       32.7       50.4
+2022      40       81.0       57.1       81.0
+2023      21       74.9       53.0       75.0
+2024      24       65.4       43.6       65.4
+2025      12       53.5       35.1       53.5
+TOTAL    138      453.5      293.1      453.7
+/yr     19.7       64.8       41.9       64.8
+
+GCAT 추정치(flag=?) 포함 행 : 115 / 138
+
+--- 추진방식(satcat Motor 기준) ---
+  CHEM        62 기   추진제질량비 0.07 ~ 0.68 (중앙 0.46)
+  CHEM+ELEC    2 기   추진제질량비 0.35 ~ 0.35 (중앙 0.35)
+  ELEC        27 기   추진제질량비 0.00 ~ 0.50 (중앙 0.09)
+  RCS          6 기   추진제질량비 0.00 ~ 0.17 (중앙 0.00)
+  UNK         41 기   추진제질량비 0.00 ~ 0.60 (중앙 0.11)
+
+--- OrbPay(O.tsv) vs sum(TotMass)(satcat) 대조 : 171 발사 ---
+    완전일치 124 / 1%이내 130 / 5%이내 144
+    최종 CSV 에 포함된 발사 중 5% 초과 불일치 : 8 건
+      2024-234   SXM-9                      OrbPay=   4500 sumTot=   7000 diff=    2500 (55.6%) n=1
+      2024-134   USSF-51                    OrbPay=   5000 sumTot=   7300 diff=    2300 (46.0%) n=7
+      2025-205   Nusantara Lima             OrbPay=   5500 sumTot=   7800 diff=    2300 (41.8%) n=1
+      2022-144   LDPE-2                     OrbPay=   1443 sumTot=   2243 diff=     800 (55.4%) n=16
+      2024-212   Optus X                    OrbPay=   4500 sumTot=   4000 diff=    -500 (-11.1%) n=1
+      2020-005   Eutelsat Konnect/GSAT-30   OrbPay=   7416 sumTot=   6976 diff=    -440 (-5.9%) n=2
+      2023-093   Heinrich Hertz/Syracuse    OrbPay=   7420 sumTot=   6980 diff=    -440 (-5.9%) n=2
+      2025-173   NTS-3                      OrbPay=   2000 sumTot=   1850 diff=    -150 (-7.5%) n=3
+    -> mass_reconciliation_2019_2025.csv
+
+--- make_payload_mass ---
+geo_payload_demand_2019_2025.csv : 138 satellites
+
+class     n      wet_t  payload_t      dry_t    saved_t
+GEO      48       59.1       59.1       50.3        0.0
+GTO      63      286.6      182.4      167.2      104.1
+STO      27      107.9       82.0       75.6       25.9
+ALL     138      453.5      323.5      293.1      130.0
+
+payload_basis : {'rocket_eq': 90, 'direct_geo:tot_mass': 48}
+
+year      n      wet_t  payload_t
+2019     15       73.9       44.5
+2020     13       54.4       35.5
+2021     13       50.4       37.6
+2022     40       81.0       57.7
+2023     21       74.9       63.3
+2024     24       65.4       48.1
+2025     12       53.5       36.8
+
+--- applied dv ---
+   CC     GTO  CHEM       dv= 1805 m/s  Isp= 320  n=20
+   CC     GTO  CHEM+ELEC  dv= 1805 m/s  Isp= 320  n=2
+   CC     GTO  ELEC       dv= 2256 m/s  Isp=1800  n=4
+   CC     STO  CHEM       dv= 1453 m/s  Isp= 320  n=7
+   CC     STO  ELEC       dv= 1816 m/s  Isp=1800  n=13
+   CC     STO  RCS        dv= 1646 m/s  Isp= 320  n=1
+   CSG    GTO  CHEM       dv= 1490 m/s  Isp= 320  n=21
+   CSG    GTO  ELEC       dv= 1863 m/s  Isp=1800  n=5
+   CSG    STO  ELEC       dv= 1819 m/s  Isp=1800  n=1
+   KSC    GTO  CHEM       dv= 1805 m/s  Isp= 320  n=2
+   KSC    GTO  ELEC       dv= 2256 m/s  Isp=1800  n=1
+   KSC    STO  CHEM       dv= 1547 m/s  Isp= 320  n=2
+   KSC    STO  ELEC       dv= 2057 m/s  Isp=1800  n=2
+   SHAR   GTO  CHEM       dv= 1661 m/s  Isp= 320  n=4
+   TNSC   GTO  CHEM       dv= 1663 m/s  Isp= 320  n=4
+   TNSC   STO  ELEC       dv= 1952 m/s  Isp=1800  n=1
+
+below_gcat_dry : 37 / 90  (GCAT DryMass 가 라운드 추정치라 높게 잡힌 경우)
+
+--- 민감도: 총 payload [t] ---
+가정                              payload_t
+기준 (320s / 1800s / 1.25)            323.5
+화학 Isp 310s                         320.7
+화학 Isp 325s                         324.9
+전기 Isp 1600s                        322.2
+전기 Isp 2000s                        324.6
+저추력보정 1.0 (임펄시브)                    325.8
+저추력보정 1.5                           321.4
+
+--- make_demand_json ---
+[merge] 2021-118                  2기 ->   525 kg  (LDPE 1 500, ASCENT 25)
+[merge] 2022-006                  2기 ->  1000 kg  (USA 324 500, USA 325 500)
+[merge] 2022-073                  2기 ->   600 kg  (USSF 12 Ring 500, USA 337 100)
+[merge] 2022-144                 16기 ->  2244 kg  (LDPE 2 500, USA 339 500, USA 340 100, USA 341 100, LINUSS1 22, LINUSS2 22, USA 344 100, USA 399 100, USA 546 100, USA 547 100, USA 548 100, USA 551 100, USA 552 100, USA 553 100, USA 556 100, USA 557 100)
+[merge] 2023-060                  2기 ->   422 kg  (Arcturus 400, G-Space 1 22)
+[merge] 2024-134                  5기 ->   900 kg  (USA 396 500, USA 566 100, USA 567 100, USA 568 100, USA 569 100)
+[merge] 2024-252                  4기 ->  1424 kg  (UtilitySat 356, NuView Alpha 356, AGILA 356, NuView Bravo 356)
+[merge] 2025-173                  2기 ->   600 kg  (USA 554 500, USA 571 100)
+[merge] 총 35기가 8개 이벤트로 통합됨
+[shift] 전체 +30일, 연도 경계를 넘은 이벤트 19건 (year 재계산)
+C:\Users\User\Desktop\PL_Supply_Only_GTO\inputs\demand_hist_7yr_2019_2025.json
+  events 111   total 323.5 t
+
+year       n     mass_t       실제_t
+1         12       34.7       44.5   (2019)
+2         12       33.3       35.5   (2020)
+3         12       39.2       37.6   (2021)
+4         23       58.0       57.7   (2022)
+5         24       73.5       63.3   (2023)
+6         13       36.2       48.1   (2024)
+7         15       48.7       36.8   (2025)
+  TOT    111      323.5      323.5
+
+--- 스텝별 분포 (30일 격자, 총 84 스텝) ---
+  이벤트가 있는 스텝 : 48 / 84
+  스텝당 이벤트 수   : 최대 5, 평균 2.3
+  분포 : {1: 15, 2: 15, 3: 8, 4: 8, 5: 2}
+
+--- 스텝별 상세 ---
+  step  2 (day   60, Y1)  5.62 t  n=2  SGS-1(02-05), GSAT-31(02-05)
+  step  3 (day   90, Y1)  6.41 t  n=3  Nusantara Satu(02-22), S5(02-22), WGS SV-10(03-16)
+  step  4 (day  120, Y1)  3.95 t  n=1  Arabsat 6A(04-11)
+  step  7 (day  210, Y1)  6.05 t  n=2  T16(06-20), EUTELSAT 7C(06-20)
+  step  8 (day  240, Y1) 12.67 t  n=4  EDRS C(08-06), Intelsat IS-39(08-06), Amos 17(08-06), AEHF SV-5(08-08)
+  step 12 (day  360, Y2)  9.80 t  n=3  Tiba 1(11-26), Inmarsat GX5(11-26), JCSAT 18/Kacific 1(12-17)
+  step 13 (day  390, Y2)  5.34 t  n=2  GSAT-30(01-16), Eutelsat Konnect(01-16)
+  step 15 (day  450, Y2)  5.75 t  n=2  JCSAT 17(02-18), Cheollian 2B(02-18)
+  step 16 (day  480, Y2)  3.49 t  n=1  AEHF SV-6(03-26)
+  step 20 (day  600, Y2)  8.93 t  n=4  ANASIS-II(07-20), BSAT-4b(08-15), MEV-2(08-15), Galaxy 30(08-15)
+  step 24 (day  720, Y3) 12.01 t  n=4  Deta chukei eisei (11-29), USA 311(12-11), SXM-7(12-13), CMS 1(12-17)
+  step 25 (day  750, Y3)  3.12 t  n=1  Turksat 5A(01-08)
+  step 30 (day  900, Y3)  6.47 t  n=2  SBIRS GEO-5(05-18), SXM-8(06-06)
+  step 32 (day  960, Y3)  6.00 t  n=2  Star One D2(07-30), Eutelsat Quantum(07-30)
+  step 35 (day 1050, Y3) 11.60 t  n=3  SES-17(10-24), Syracuse 4A(10-24), Michibiki Shogoki (10-26)
+  step 36 (day 1080, Y4) 10.44 t  n=4  2021-118 소형위성 2기 통(12-07), STPSAT-6(12-07), Turksat 5B(12-19), Inmarsat 6 F1(12-22)
+  step 38 (day 1140, Y4)  1.00 t  n=1  2022-006 소형위성 2기 통(01-21)
+  step 39 (day 1170, Y4)  2.93 t  n=1  GOES 18(03-01)
+  step 42 (day 1260, Y4)  2.22 t  n=1  Nilesat 301(06-08)
+  step 43 (day 1290, Y4) 11.68 t  n=5  2022-073 소형위성 2기 통(07-01), GSAT-24(06-22), Measat 3D(06-22), SES-22(06-29) ...
+  step 44 (day 1320, Y4)  2.53 t  n=1  SBIRS GEO-6(08-04)
+  step 45 (day 1350, Y4)  5.86 t  n=1  Eutelsat Konnect V(09-07)
+  step 46 (day 1380, Y4) 11.39 t  n=5  SES-20(10-04), SES-21(10-04), Galaxy 33(10-08), Galaxy 34(10-08) ...
+  step 47 (day 1410, Y4)  9.90 t  n=4  2022-144 소형위성 16기 (11-01), EUTELSAT HOT BIRD (11-03), Galaxy 31(11-12), Galaxy 32(11-12)
+  step 48 (day 1440, Y5) 10.22 t  n=4  EUTELSAT 10B(11-23), Galaxy 35(12-13), Galaxy 36(12-13), Meteosat 12(12-13)
+  step 49 (day 1470, Y5)  3.70 t  n=2  CBAS 2(01-15), LDPE 3A(01-15)
+  step 50 (day 1500, Y5)  4.00 t  n=1  Amazonas Nexus(02-07)
+  step 51 (day 1530, Y5)  8.90 t  n=3  Inmarsat 6 F2(02-18), SES 18(03-17), SES 19(03-17)
+  step 52 (day 1560, Y5)  3.38 t  n=1  Intelsat IS-40e(04-07)
+  step 53 (day 1590, Y5)  6.84 t  n=2  2023-060 소형위성 2기 통(05-01), Viasat-3 Americas(05-01)
+  step 54 (day 1620, Y5)  5.32 t  n=2  Badr 8(05-27), NVS-01(05-29)
+  step 55 (day 1650, Y5) 15.38 t  n=4  Nusantara Tiga(06-18), USA 345(06-22), Heinrich-Hertz-Sat(07-05), Syracuse 4B(07-05)
+  step 56 (day 1680, Y5) 12.16 t  n=2  Jupiter 3(07-29), Galaxy 37(08-03)
+  step 57 (day 1710, Y5)  3.60 t  n=3  USA 346(09-10), USA 347(09-10), USA 348(09-10)
+  step 61 (day 1830, Y6)  1.06 t  n=1  Ovzon 3(01-03)
+  step 63 (day 1890, Y6)  3.71 t  n=2  Insat 3DS(02-17), Merah Putih 2(02-20)
+  step 64 (day 1920, Y6)  9.45 t  n=2  EUTELSAT 36D(03-30), USA 353(04-09)
+  step 67 (day 2010, Y6)  9.78 t  n=3  Astra 1P(06-20), GOES 19(06-25), Turksat 6A(07-08)
+  step 68 (day 2040, Y6)  7.30 t  n=3  2024-134 소형위성 5기 통(07-30), USA 397(07-30), USA 398(07-30)
+  step 71 (day 2130, Y6)  4.91 t  n=2  Kirameki 3(11-04), Mugunghwa 6A(11-11)
+  step 72 (day 2160, Y7) 11.91 t  n=4  2024-252 소형위성 4기 통(12-29), Optus X(11-17), GSAT-20(11-18), SXM-9(12-05)
+  step 73 (day 2190, Y7)  4.40 t  n=1  Thuraya 4-NGS(01-04)
+  step 74 (day 2220, Y7)  8.25 t  n=2  Spainsat NG-1(01-30), Michibiki-6(02-02)
+  step 78 (day 2340, Y7)  3.60 t  n=1  SXM-10(06-07)
+  step 79 (day 2370, Y7)  2.66 t  n=1  Dror 1(07-13)
+  step 80 (day 2400, Y7)  1.85 t  n=2  2025-173 소형위성 2기 통(08-13), NTS 3(08-13)
+  step 81 (day 2430, Y7)  4.39 t  n=1  Nusantara Lima(09-12)
+  step 83 (day 2490, Y7) 11.62 t  n=3  Spainsat NG-2(10-24), CMS-03(11-02), Viasat-3 EMEA(11-14)
+
+========================================================================
+  8년치  2018 ~ 2025
+========================================================================
+
+--- make_geo_csv ---
+GEO 지향 발사 197 건 -> 페이로드 후보에서
+  최종목적지 GEO 아님 제외 : 19
+      S43229   PODSAT                     US      PODSAT: 180x22165 km 에 머문 GTO 시험탑재체, 궤도상승 안 함
+      S43241   GSAT-6A                    IN      GSAT-6A: 3차 원지점분사 후 교신두절, 25977x36370 km 좌초 (전손)
+      S44482   TDO                        US      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=R)
+      S44493   Zhongxing 18               CN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+      S44049   B'reshit                   IL      심우주 이탈 (Status=DSO)
+      S44441   Chandrayaan-2              IN      심우주 이탈 (Status=DSO)
+      S45464   OrCa                       US      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=R)
+      S50505   GMM PN                     RU      로켓에서 분리 실패, 부착된 채 좌초 (Status=AR)
+      S47851   Shiyan 9                   CN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+      S48619   TDO 3                      US      TDO 3: MEO 캘리브레이션 타겟(20 kg), 재진입
+      S48620   TDO 4                      US      TDO 4: MEO 캘리브레이션 타겟(20 kg), 재진입
+      S57320   Chandrayaan-3              IN      심우주 이탈 (Status=DSA)
+      S57770   Chandrayaan-3 PM           IN      심우주 이탈 (Status=DSO)
+      S57754   Aditya-L1                  IN      심우주 이탈 (Status=DSO)
+      S59480   ADV.00.00.000-01           RU      GEO 미도달 후 재진입 (Status=R, OpOrbit=LLEO/I)
+      S59509   Gagarinets                 RU      GEO 미도달 후 재진입 (Status=R, OpOrbit=LLEO/I)
+      S62256   PROBA-3 CSC                I-ESA   PROBA-3 CSC: HEO 편대비행 미션, GEO 아님
+      S62258   PROBA-3 OSC                I-ESA   PROBA-3 OSC: HEO 편대비행 미션, GEO 아님
+      S62850   NVS-02                     IN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+  중국/러시아 제외         : 102
+  => geo_satellites_2018_2025.csv : 165 satellites
+
+year       n     mass_t      dry_t      tot_t
+2018      27      108.0       54.4      108.0
+2019      15       73.9       39.1       73.9
+2020      13       54.4       32.4       54.4
+2021      13       50.4       32.7       50.4
+2022      40       81.0       57.1       81.0
+2023      21       74.9       53.0       75.0
+2024      24       65.4       43.6       65.4
+2025      12       53.5       35.1       53.5
+TOTAL    165      561.5      347.5      561.7
+/yr     20.6       70.2       43.4       70.2
+
+GCAT 추정치(flag=?) 포함 행 : 138 / 165
+
+--- 추진방식(satcat Motor 기준) ---
+  CHEM        81 기   추진제질량비 0.07 ~ 0.72 (중앙 0.47)
+  CHEM+ELEC    3 기   추진제질량비 0.35 ~ 0.35 (중앙 0.35)
+  ELEC        29 기   추진제질량비 0.00 ~ 0.50 (중앙 0.10)
+  RCS          6 기   추진제질량비 0.00 ~ 0.17 (중앙 0.00)
+  UNK         46 기   추진제질량비 0.00 ~ 0.60 (중앙 0.12)
+
+--- OrbPay(O.tsv) vs sum(TotMass)(satcat) 대조 : 197 발사 ---
+    완전일치 143 / 1%이내 149 / 5%이내 167
+    최종 CSV 에 포함된 발사 중 5% 초과 불일치 : 9 건
+      2024-234   SXM-9                      OrbPay=   4500 sumTot=   7000 diff=    2500 (55.6%) n=1
+      2024-134   USSF-51                    OrbPay=   5000 sumTot=   7300 diff=    2300 (46.0%) n=7
+      2025-205   Nusantara Lima             OrbPay=   5500 sumTot=   7800 diff=    2300 (41.8%) n=1
+      2022-144   LDPE-2                     OrbPay=   1443 sumTot=   2243 diff=     800 (55.4%) n=16
+      2024-212   Optus X                    OrbPay=   4500 sumTot=   4000 diff=    -500 (-11.1%) n=1
+      2018-012   SES-14/Al Yah 3            OrbPay=   8658 sumTot=   8218 diff=    -440 (-5.1%) n=2
+      2020-005   Eutelsat Konnect/GSAT-30   OrbPay=   7416 sumTot=   6976 diff=    -440 (-5.9%) n=2
+      2023-093   Heinrich Hertz/Syracuse    OrbPay=   7420 sumTot=   6980 diff=    -440 (-5.9%) n=2
+      2025-173   NTS-3                      OrbPay=   2000 sumTot=   1850 diff=    -150 (-7.5%) n=3
+    -> mass_reconciliation_2018_2025.csv
+
+--- make_payload_mass ---
+geo_payload_demand_2018_2025.csv : 165 satellites
+
+class     n      wet_t  payload_t      dry_t    saved_t
+GEO      53       63.1       63.1       53.9        0.0
+GTO      83      381.1      239.2      213.1      141.9
+STO      29      117.2       89.2       80.6       28.1
+ALL     165      561.5      391.5      347.5      170.0
+
+payload_basis : {'rocket_eq': 112, 'direct_geo:tot_mass': 53}
+
+year      n      wet_t  payload_t
+2018     27      108.0       68.0
+2019     15       73.9       44.5
+2020     13       54.4       35.5
+2021     13       50.4       37.6
+2022     40       81.0       57.7
+2023     21       74.9       63.3
+2024     24       65.4       48.1
+2025     12       53.5       36.8
+
+--- applied dv ---
+   CC     GTO  CHEM       dv= 1805 m/s  Isp= 320  n=26
+   CC     GTO  CHEM+ELEC  dv= 1805 m/s  Isp= 320  n=3
+   CC     GTO  ELEC       dv= 2256 m/s  Isp=1800  n=4
+   CC     STO  CHEM       dv= 1657 m/s  Isp= 320  n=8
+   CC     STO  ELEC       dv= 2021 m/s  Isp=1800  n=14
+   CC     STO  RCS        dv= 1646 m/s  Isp= 320  n=1
+   CSG    GTO  CHEM       dv= 1490 m/s  Isp= 320  n=28
+   CSG    GTO  ELEC       dv= 1863 m/s  Isp=1800  n=6
+   CSG    STO  ELEC       dv= 1819 m/s  Isp=1800  n=1
+   KSC    GTO  CHEM       dv= 1805 m/s  Isp= 320  n=4
+   KSC    GTO  ELEC       dv= 2256 m/s  Isp=1800  n=1
+   KSC    STO  CHEM       dv= 1547 m/s  Isp= 320  n=2
+   KSC    STO  ELEC       dv= 2057 m/s  Isp=1800  n=2
+   SHAR   GTO  CHEM       dv= 1661 m/s  Isp= 320  n=7
+   TNSC   GTO  CHEM       dv= 1663 m/s  Isp= 320  n=4
+   TNSC   STO  ELEC       dv= 1952 m/s  Isp=1800  n=1
+
+below_gcat_dry : 39 / 112  (GCAT DryMass 가 라운드 추정치라 높게 잡힌 경우)
+
+--- 민감도: 총 payload [t] ---
+가정                              payload_t
+기준 (320s / 1800s / 1.25)            391.5
+화학 Isp 310s                         387.7
+화학 Isp 325s                         393.3
+전기 Isp 1600s                        390.0
+전기 Isp 2000s                        392.7
+저추력보정 1.0 (임펄시브)                    393.9
+저추력보정 1.5                           389.2
+
+--- make_demand_json ---
+[merge] 2018-036                  4기 ->   800 kg  (EAGLE 500, USA 285 100, USA 286 100, MYCROFT 100)
+[merge] 2021-118                  2기 ->   525 kg  (LDPE 1 500, ASCENT 25)
+[merge] 2022-006                  2기 ->  1000 kg  (USA 324 500, USA 325 500)
+[merge] 2022-073                  2기 ->   600 kg  (USSF 12 Ring 500, USA 337 100)
+[merge] 2022-144                 16기 ->  2244 kg  (LDPE 2 500, USA 339 500, USA 340 100, USA 341 100, LINUSS1 22, LINUSS2 22, USA 344 100, USA 399 100, USA 546 100, USA 547 100, USA 548 100, USA 551 100, USA 552 100, USA 553 100, USA 556 100, USA 557 100)
+[merge] 2023-060                  2기 ->   422 kg  (Arcturus 400, G-Space 1 22)
+[merge] 2024-134                  5기 ->   900 kg  (USA 396 500, USA 566 100, USA 567 100, USA 568 100, USA 569 100)
+[merge] 2024-252                  4기 ->  1424 kg  (UtilitySat 356, NuView Alpha 356, AGILA 356, NuView Bravo 356)
+[merge] 2025-173                  2기 ->   600 kg  (USA 554 500, USA 571 100)
+[merge] 총 39기가 9개 이벤트로 통합됨
+[shift] 전체 +30일, 연도 경계를 넘은 이벤트 22건 (year 재계산)
+C:\Users\User\Desktop\PL_Supply_Only_GTO\inputs\demand_hist_8yr_2018_2025.json
+  events 135   total 391.5 t
+
+year       n     mass_t       실제_t
+1         21       60.8       68.0   (2018)
+2         15       41.8       44.5   (2019)
+3         12       33.3       35.5   (2020)
+4         12       39.2       37.6   (2021)
+5         23       58.0       57.7   (2022)
+6         24       73.5       63.3   (2023)
+7         13       36.2       48.1   (2024)
+8         15       48.7       36.8   (2025)
+  TOT    135      391.5      391.5
+
+--- 스텝별 분포 (30일 격자, 총 96 스텝) ---
+  이벤트가 있는 스텝 : 58 / 96
+  스텝당 이벤트 수   : 최대 5, 평균 2.3
+  분포 : {1: 18, 2: 18, 3: 10, 4: 9, 5: 3}
+
+--- 스텝별 상세 ---
+  step  2 (day   60, Y1) 11.23 t  n=4  SBIRS GEO-3(01-20), Al Yah 3(01-25), SES-14(01-25), GovSat-1(01-31)
+  step  3 (day   90, Y1)  6.35 t  n=2  GOES 17(03-01), Hispasat 30W-6(03-06)
+  step  4 (day  120, Y1) 10.47 t  n=5  2018-036 소형위성 4기 통(04-14), Kirameki 1(04-05), Hylas 4(04-05), IRNSS-R1I(04-11) ...
+  step  5 (day  150, Y1)  2.08 t  n=1  Bangabandhu 1(05-11)
+  step  6 (day  180, Y1)  4.80 t  n=1  SES-12(06-04)
+  step  8 (day  240, Y1)  7.25 t  n=2  Telstar 19 Vantage(07-22), Merah Putih(08-07)
+  step  9 (day  270, Y1)  3.97 t  n=1  Telstar 18 Vantage(09-10)
+  step 10 (day  300, Y1)  6.18 t  n=2  Azerspace-2(09-25), Horizons 3e(09-25)
+  step 11 (day  330, Y1)  8.49 t  n=3  AEHF SV-4(10-17), GSAT-29(11-14), Es'hailsat-2(11-15)
+  step 12 (day  360, Y2)  7.15 t  n=3  Cheollian 2A(12-04), GSAT-11(12-04), GSAT-7A(12-19)
+  step 14 (day  420, Y2)  5.62 t  n=2  SGS-1(02-05), GSAT-31(02-05)
+  step 15 (day  450, Y2)  6.41 t  n=3  Nusantara Satu(02-22), S5(02-22), WGS SV-10(03-16)
+  step 16 (day  480, Y2)  3.95 t  n=1  Arabsat 6A(04-11)
+  step 19 (day  570, Y2)  6.05 t  n=2  T16(06-20), EUTELSAT 7C(06-20)
+  step 20 (day  600, Y2) 12.67 t  n=4  EDRS C(08-06), Intelsat IS-39(08-06), Amos 17(08-06), AEHF SV-5(08-08)
+  step 24 (day  720, Y3)  9.80 t  n=3  Tiba 1(11-26), Inmarsat GX5(11-26), JCSAT 18/Kacific 1(12-17)
+  step 25 (day  750, Y3)  5.34 t  n=2  GSAT-30(01-16), Eutelsat Konnect(01-16)
+  step 27 (day  810, Y3)  5.75 t  n=2  JCSAT 17(02-18), Cheollian 2B(02-18)
+  step 28 (day  840, Y3)  3.49 t  n=1  AEHF SV-6(03-26)
+  step 32 (day  960, Y3)  8.93 t  n=4  ANASIS-II(07-20), BSAT-4b(08-15), MEV-2(08-15), Galaxy 30(08-15)
+  step 36 (day 1080, Y4) 12.01 t  n=4  Deta chukei eisei (11-29), USA 311(12-11), SXM-7(12-13), CMS 1(12-17)
+  step 37 (day 1110, Y4)  3.12 t  n=1  Turksat 5A(01-08)
+  step 42 (day 1260, Y4)  6.47 t  n=2  SBIRS GEO-5(05-18), SXM-8(06-06)
+  step 44 (day 1320, Y4)  6.00 t  n=2  Star One D2(07-30), Eutelsat Quantum(07-30)
+  step 47 (day 1410, Y4) 11.60 t  n=3  SES-17(10-24), Syracuse 4A(10-24), Michibiki Shogoki (10-26)
+  step 48 (day 1440, Y5) 10.44 t  n=4  2021-118 소형위성 2기 통(12-07), STPSAT-6(12-07), Turksat 5B(12-19), Inmarsat 6 F1(12-22)
+  step 50 (day 1500, Y5)  1.00 t  n=1  2022-006 소형위성 2기 통(01-21)
+  step 51 (day 1530, Y5)  2.93 t  n=1  GOES 18(03-01)
+  step 54 (day 1620, Y5)  2.22 t  n=1  Nilesat 301(06-08)
+  step 55 (day 1650, Y5) 11.68 t  n=5  2022-073 소형위성 2기 통(07-01), GSAT-24(06-22), Measat 3D(06-22), SES-22(06-29) ...
+  step 56 (day 1680, Y5)  2.53 t  n=1  SBIRS GEO-6(08-04)
+  step 57 (day 1710, Y5)  5.86 t  n=1  Eutelsat Konnect V(09-07)
+  step 58 (day 1740, Y5) 11.39 t  n=5  SES-20(10-04), SES-21(10-04), Galaxy 33(10-08), Galaxy 34(10-08) ...
+  step 59 (day 1770, Y5)  9.90 t  n=4  2022-144 소형위성 16기 (11-01), EUTELSAT HOT BIRD (11-03), Galaxy 31(11-12), Galaxy 32(11-12)
+  step 60 (day 1800, Y6) 10.22 t  n=4  EUTELSAT 10B(11-23), Galaxy 35(12-13), Galaxy 36(12-13), Meteosat 12(12-13)
+  step 61 (day 1830, Y6)  3.70 t  n=2  CBAS 2(01-15), LDPE 3A(01-15)
+  step 62 (day 1860, Y6)  4.00 t  n=1  Amazonas Nexus(02-07)
+  step 63 (day 1890, Y6)  8.90 t  n=3  Inmarsat 6 F2(02-18), SES 18(03-17), SES 19(03-17)
+  step 64 (day 1920, Y6)  3.38 t  n=1  Intelsat IS-40e(04-07)
+  step 65 (day 1950, Y6)  6.84 t  n=2  2023-060 소형위성 2기 통(05-01), Viasat-3 Americas(05-01)
+  step 66 (day 1980, Y6)  5.32 t  n=2  Badr 8(05-27), NVS-01(05-29)
+  step 67 (day 2010, Y6) 15.38 t  n=4  Nusantara Tiga(06-18), USA 345(06-22), Heinrich-Hertz-Sat(07-05), Syracuse 4B(07-05)
+  step 68 (day 2040, Y6) 12.16 t  n=2  Jupiter 3(07-29), Galaxy 37(08-03)
+  step 69 (day 2070, Y6)  3.60 t  n=3  USA 346(09-10), USA 347(09-10), USA 348(09-10)
+  step 73 (day 2190, Y7)  1.06 t  n=1  Ovzon 3(01-03)
+  step 75 (day 2250, Y7)  3.71 t  n=2  Insat 3DS(02-17), Merah Putih 2(02-20)
+  step 76 (day 2280, Y7)  9.45 t  n=2  EUTELSAT 36D(03-30), USA 353(04-09)
+  step 79 (day 2370, Y7)  9.78 t  n=3  Astra 1P(06-20), GOES 19(06-25), Turksat 6A(07-08)
+  step 80 (day 2400, Y7)  7.30 t  n=3  2024-134 소형위성 5기 통(07-30), USA 397(07-30), USA 398(07-30)
+  step 83 (day 2490, Y7)  4.91 t  n=2  Kirameki 3(11-04), Mugunghwa 6A(11-11)
+  step 84 (day 2520, Y8) 11.91 t  n=4  2024-252 소형위성 4기 통(12-29), Optus X(11-17), GSAT-20(11-18), SXM-9(12-05)
+  step 85 (day 2550, Y8)  4.40 t  n=1  Thuraya 4-NGS(01-04)
+  step 86 (day 2580, Y8)  8.25 t  n=2  Spainsat NG-1(01-30), Michibiki-6(02-02)
+  step 90 (day 2700, Y8)  3.60 t  n=1  SXM-10(06-07)
+  step 91 (day 2730, Y8)  2.66 t  n=1  Dror 1(07-13)
+  step 92 (day 2760, Y8)  1.85 t  n=2  2025-173 소형위성 2기 통(08-13), NTS 3(08-13)
+  step 93 (day 2790, Y8)  4.39 t  n=1  Nusantara Lima(09-12)
+  step 95 (day 2850, Y8) 11.62 t  n=3  Spainsat NG-2(10-24), CMS-03(11-02), Viasat-3 EMEA(11-14)
+
+========================================================================
+  9년치  2017 ~ 2025
+========================================================================
+
+--- make_geo_csv ---
+GEO 지향 발사 231 건 -> 페이로드 후보에서
+  최종목적지 GEO 아님 제외 : 20
+      S42928   IRNSS-R1H                  IN      로켓에서 분리 실패, 부착된 채 좌초 (Status=AR)
+      S43229   PODSAT                     US      PODSAT: 180x22165 km 에 머문 GTO 시험탑재체, 궤도상승 안 함
+      S43241   GSAT-6A                    IN      GSAT-6A: 3차 원지점분사 후 교신두절, 25977x36370 km 좌초 (전손)
+      S44482   TDO                        US      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=R)
+      S44493   Zhongxing 18               CN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+      S44049   B'reshit                   IL      심우주 이탈 (Status=DSO)
+      S44441   Chandrayaan-2              IN      심우주 이탈 (Status=DSO)
+      S45464   OrCa                       US      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=R)
+      S50505   GMM PN                     RU      로켓에서 분리 실패, 부착된 채 좌초 (Status=AR)
+      S47851   Shiyan 9                   CN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+      S48619   TDO 3                      US      TDO 3: MEO 캘리브레이션 타겟(20 kg), 재진입
+      S48620   TDO 4                      US      TDO 4: MEO 캘리브레이션 타겟(20 kg), 재진입
+      S57320   Chandrayaan-3              IN      심우주 이탈 (Status=DSA)
+      S57770   Chandrayaan-3 PM           IN      심우주 이탈 (Status=DSO)
+      S57754   Aditya-L1                  IN      심우주 이탈 (Status=DSO)
+      S59480   ADV.00.00.000-01           RU      GEO 미도달 후 재진입 (Status=R, OpOrbit=LLEO/I)
+      S59509   Gagarinets                 RU      GEO 미도달 후 재진입 (Status=R, OpOrbit=LLEO/I)
+      S62256   PROBA-3 CSC                I-ESA   PROBA-3 CSC: HEO 편대비행 미션, GEO 아님
+      S62258   PROBA-3 OSC                I-ESA   PROBA-3 OSC: HEO 편대비행 미션, GEO 아님
+      S62850   NVS-02                     IN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+  중국/러시아 제외         : 113
+  => geo_satellites_2017_2025.csv : 192 satellites
+
+year       n     mass_t      dry_t      tot_t
+2017      27      127.7       67.7      127.7
+2018      27      108.0       54.4      108.0
+2019      15       73.9       39.1       73.9
+2020      13       54.4       32.4       54.4
+2021      13       50.4       32.7       50.4
+2022      40       81.0       57.1       81.0
+2023      21       74.9       53.0       75.0
+2024      24       65.4       43.6       65.4
+2025      12       53.5       35.1       53.5
+TOTAL    192      689.2      415.2      689.4
+/yr     21.3       76.6       46.1       76.6
+
+GCAT 추정치(flag=?) 포함 행 : 156 / 192
+
+--- 추진방식(satcat Motor 기준) ---
+  CHEM       106 기   추진제질량비 0.07 ~ 0.72 (중앙 0.47)
+  CHEM+ELEC    3 기   추진제질량비 0.35 ~ 0.35 (중앙 0.35)
+  ELEC        30 기   추진제질량비 0.00 ~ 0.50 (중앙 0.10)
+  RCS          6 기   추진제질량비 0.00 ~ 0.17 (중앙 0.00)
+  UNK         47 기   추진제질량비 0.00 ~ 0.60 (중앙 0.12)
+
+--- OrbPay(O.tsv) vs sum(TotMass)(satcat) 대조 : 231 발사 ---
+    완전일치 167 / 1%이내 173 / 5%이내 196
+    최종 CSV 에 포함된 발사 중 5% 초과 불일치 : 9 건
+      2024-234   SXM-9                      OrbPay=   4500 sumTot=   7000 diff=    2500 (55.6%) n=1
+      2024-134   USSF-51                    OrbPay=   5000 sumTot=   7300 diff=    2300 (46.0%) n=7
+      2025-205   Nusantara Lima             OrbPay=   5500 sumTot=   7800 diff=    2300 (41.8%) n=1
+      2022-144   LDPE-2                     OrbPay=   1443 sumTot=   2243 diff=     800 (55.4%) n=16
+      2024-212   Optus X                    OrbPay=   4500 sumTot=   4000 diff=    -500 (-11.1%) n=1
+      2018-012   SES-14/Al Yah 3            OrbPay=   8658 sumTot=   8218 diff=    -440 (-5.1%) n=2
+      2020-005   Eutelsat Konnect/GSAT-30   OrbPay=   7416 sumTot=   6976 diff=    -440 (-5.9%) n=2
+      2023-093   Heinrich Hertz/Syracuse    OrbPay=   7420 sumTot=   6980 diff=    -440 (-5.9%) n=2
+      2025-173   NTS-3                      OrbPay=   2000 sumTot=   1850 diff=    -150 (-7.5%) n=3
+    -> mass_reconciliation_2017_2025.csv
+
+--- make_payload_mass ---
+geo_payload_demand_2017_2025.csv : 192 satellites
+
+class     n      wet_t  payload_t      dry_t    saved_t
+GEO      53       63.1       63.1       53.9        0.0
+GTO     107      495.1      307.8      272.0      187.3
+STO      32      131.0       97.3       89.3       33.7
+ALL     192      689.2      468.3      415.2      221.0
+
+payload_basis : {'rocket_eq': 139, 'direct_geo:tot_mass': 53}
+
+year      n      wet_t  payload_t
+2017     27      127.7       76.7
+2018     27      108.0       68.0
+2019     15       73.9       44.5
+2020     13       54.4       35.5
+2021     13       50.4       37.6
+2022     40       81.0       57.7
+2023     21       74.9       63.3
+2024     24       65.4       48.1
+2025     12       53.5       36.8
+
+--- applied dv ---
+   CC     GTO  CHEM       dv= 1805 m/s  Isp= 320  n=30
+   CC     GTO  CHEM+ELEC  dv= 1805 m/s  Isp= 320  n=3
+   CC     GTO  ELEC       dv= 2256 m/s  Isp=1800  n=4
+   CC     STO  CHEM       dv= 1657 m/s  Isp= 320  n=8
+   CC     STO  ELEC       dv= 2021 m/s  Isp=1800  n=14
+   CC     STO  RCS        dv= 1646 m/s  Isp= 320  n=1
+   CSG    GTO  CHEM       dv= 1490 m/s  Isp= 320  n=37
+   CSG    GTO  ELEC       dv= 1863 m/s  Isp=1800  n=7
+   CSG    STO  ELEC       dv= 1819 m/s  Isp=1800  n=1
+   KSC    GTO  CHEM       dv= 1805 m/s  Isp= 320  n=8
+   KSC    GTO  ELEC       dv= 2256 m/s  Isp=1800  n=1
+   KSC    STO  CHEM       dv= 1605 m/s  Isp= 320  n=5
+   KSC    STO  ELEC       dv= 2057 m/s  Isp=1800  n=2
+   SHAR   GTO  CHEM       dv= 1661 m/s  Isp= 320  n=9
+   TNSC   GTO  CHEM       dv= 1663 m/s  Isp= 320  n=8
+   TNSC   STO  ELEC       dv= 1952 m/s  Isp=1800  n=1
+
+below_gcat_dry : 46 / 139  (GCAT DryMass 가 라운드 추정치라 높게 잡힌 경우)
+
+--- 민감도: 총 payload [t] ---
+가정                              payload_t
+기준 (320s / 1800s / 1.25)            468.3
+화학 Isp 310s                         463.2
+화학 Isp 325s                         470.7
+전기 Isp 1600s                        466.7
+전기 Isp 2000s                        469.5
+저추력보정 1.0 (임펄시브)                    470.7
+저추력보정 1.5                           465.8
+
+--- make_demand_json ---
+[merge] 2018-036                  4기 ->   800 kg  (EAGLE 500, USA 285 100, USA 286 100, MYCROFT 100)
+[merge] 2021-118                  2기 ->   525 kg  (LDPE 1 500, ASCENT 25)
+[merge] 2022-006                  2기 ->  1000 kg  (USA 324 500, USA 325 500)
+[merge] 2022-073                  2기 ->   600 kg  (USSF 12 Ring 500, USA 337 100)
+[merge] 2022-144                 16기 ->  2244 kg  (LDPE 2 500, USA 339 500, USA 340 100, USA 341 100, LINUSS1 22, LINUSS2 22, USA 344 100, USA 399 100, USA 546 100, USA 547 100, USA 548 100, USA 551 100, USA 552 100, USA 553 100, USA 556 100, USA 557 100)
+[merge] 2023-060                  2기 ->   422 kg  (Arcturus 400, G-Space 1 22)
+[merge] 2024-134                  5기 ->   900 kg  (USA 396 500, USA 566 100, USA 567 100, USA 568 100, USA 569 100)
+[merge] 2024-252                  4기 ->  1424 kg  (UtilitySat 356, NuView Alpha 356, AGILA 356, NuView Bravo 356)
+[merge] 2025-173                  2기 ->   600 kg  (USA 554 500, USA 571 100)
+[merge] 총 39기가 9개 이벤트로 통합됨
+[shift] 전체 +30일, 연도 경계를 넘은 이벤트 22건 (year 재계산)
+C:\Users\User\Desktop\PL_Supply_Only_GTO\inputs\demand_hist_9yr_2017_2025.json
+  events 162   total 468.3 t
+
+year       n     mass_t       실제_t
+1         27       76.7       76.7   (2017)
+2         21       60.8       68.0   (2018)
+3         15       41.8       44.5   (2019)
+4         12       33.3       35.5   (2020)
+5         12       39.2       37.6   (2021)
+6         23       58.0       57.7   (2022)
+7         24       73.5       63.3   (2023)
+8         13       36.2       48.1   (2024)
+9         15       48.7       36.8   (2025)
+  TOT    162      468.3      468.3
+
+--- 스텝별 분포 (30일 격자, 총 108 스텝) ---
+  이벤트가 있는 스텝 : 67 / 108
+  스텝당 이벤트 수   : 최대 5, 평균 2.4
+  분포 : {1: 20, 2: 20, 3: 10, 4: 13, 5: 4}
+
+--- 스텝별 상세 ---
+  step  2 (day   60, Y1) 11.57 t  n=4  SBIRS GEO-4(01-21), Kirameki 2(01-24), Telkom-3S(02-14), SkyBrasil-1(02-14)
+  step  3 (day   90, Y1)  3.15 t  n=1  Echostar 23(03-16)
+  step  4 (day  120, Y1)  6.36 t  n=2  WGS SV-9(03-19), SES-10(03-30)
+  step  5 (day  150, Y1) 10.70 t  n=4  Koreasat 7(05-04), SGDC(05-04), South Asia Satelli(05-05), Inmarsat 5F4(05-15)
+  step  6 (day  180, Y1) 11.40 t  n=4  Michibiki-2(06-01), ViaSat-2(06-01), EUTELSAT 172B(06-01), GSAT-19E(06-05)
+  step  7 (day  210, Y1) 11.95 t  n=4  BulgariaSat-1(06-23), Hellas Sat 3-Inmar(06-28), GSAT-17(06-28), Intelsat IS-35e(07-05)
+  step  9 (day  270, Y1)  4.71 t  n=2  TDRS 13(08-18), Michibiki-3(08-19)
+  step 10 (day  300, Y1) 14.75 t  n=5  USA 279(10-15), Intelsat IS-37e(09-29), BSAT-4a(09-29), Michibiki-4(10-09) ...
+  step 11 (day  330, Y1)  2.15 t  n=1  Mugunghwa 5A(10-30)
+  step 14 (day  420, Y2) 11.23 t  n=4  SBIRS GEO-3(01-20), Al Yah 3(01-25), SES-14(01-25), GovSat-1(01-31)
+  step 15 (day  450, Y2)  6.35 t  n=2  GOES 17(03-01), Hispasat 30W-6(03-06)
+  step 16 (day  480, Y2) 10.47 t  n=5  2018-036 소형위성 4기 통(04-14), Kirameki 1(04-05), Hylas 4(04-05), IRNSS-R1I(04-11) ...
+  step 17 (day  510, Y2)  2.08 t  n=1  Bangabandhu 1(05-11)
+  step 18 (day  540, Y2)  4.80 t  n=1  SES-12(06-04)
+  step 20 (day  600, Y2)  7.25 t  n=2  Telstar 19 Vantage(07-22), Merah Putih(08-07)
+  step 21 (day  630, Y2)  3.97 t  n=1  Telstar 18 Vantage(09-10)
+  step 22 (day  660, Y2)  6.18 t  n=2  Azerspace-2(09-25), Horizons 3e(09-25)
+  step 23 (day  690, Y2)  8.49 t  n=3  AEHF SV-4(10-17), GSAT-29(11-14), Es'hailsat-2(11-15)
+  step 24 (day  720, Y3)  7.15 t  n=3  Cheollian 2A(12-04), GSAT-11(12-04), GSAT-7A(12-19)
+  step 26 (day  780, Y3)  5.62 t  n=2  SGS-1(02-05), GSAT-31(02-05)
+  step 27 (day  810, Y3)  6.41 t  n=3  Nusantara Satu(02-22), S5(02-22), WGS SV-10(03-16)
+  step 28 (day  840, Y3)  3.95 t  n=1  Arabsat 6A(04-11)
+  step 31 (day  930, Y3)  6.05 t  n=2  T16(06-20), EUTELSAT 7C(06-20)
+  step 32 (day  960, Y3) 12.67 t  n=4  EDRS C(08-06), Intelsat IS-39(08-06), Amos 17(08-06), AEHF SV-5(08-08)
+  step 36 (day 1080, Y4)  9.80 t  n=3  Tiba 1(11-26), Inmarsat GX5(11-26), JCSAT 18/Kacific 1(12-17)
+  step 37 (day 1110, Y4)  5.34 t  n=2  GSAT-30(01-16), Eutelsat Konnect(01-16)
+  step 39 (day 1170, Y4)  5.75 t  n=2  JCSAT 17(02-18), Cheollian 2B(02-18)
+  step 40 (day 1200, Y4)  3.49 t  n=1  AEHF SV-6(03-26)
+  step 44 (day 1320, Y4)  8.93 t  n=4  ANASIS-II(07-20), BSAT-4b(08-15), MEV-2(08-15), Galaxy 30(08-15)
+  step 48 (day 1440, Y5) 12.01 t  n=4  Deta chukei eisei (11-29), USA 311(12-11), SXM-7(12-13), CMS 1(12-17)
+  step 49 (day 1470, Y5)  3.12 t  n=1  Turksat 5A(01-08)
+  step 54 (day 1620, Y5)  6.47 t  n=2  SBIRS GEO-5(05-18), SXM-8(06-06)
+  step 56 (day 1680, Y5)  6.00 t  n=2  Star One D2(07-30), Eutelsat Quantum(07-30)
+  step 59 (day 1770, Y5) 11.60 t  n=3  SES-17(10-24), Syracuse 4A(10-24), Michibiki Shogoki (10-26)
+  step 60 (day 1800, Y6) 10.44 t  n=4  2021-118 소형위성 2기 통(12-07), STPSAT-6(12-07), Turksat 5B(12-19), Inmarsat 6 F1(12-22)
+  step 62 (day 1860, Y6)  1.00 t  n=1  2022-006 소형위성 2기 통(01-21)
+  step 63 (day 1890, Y6)  2.93 t  n=1  GOES 18(03-01)
+  step 66 (day 1980, Y6)  2.22 t  n=1  Nilesat 301(06-08)
+  step 67 (day 2010, Y6) 11.68 t  n=5  2022-073 소형위성 2기 통(07-01), GSAT-24(06-22), Measat 3D(06-22), SES-22(06-29) ...
+  step 68 (day 2040, Y6)  2.53 t  n=1  SBIRS GEO-6(08-04)
+  step 69 (day 2070, Y6)  5.86 t  n=1  Eutelsat Konnect V(09-07)
+  step 70 (day 2100, Y6) 11.39 t  n=5  SES-20(10-04), SES-21(10-04), Galaxy 33(10-08), Galaxy 34(10-08) ...
+  step 71 (day 2130, Y6)  9.90 t  n=4  2022-144 소형위성 16기 (11-01), EUTELSAT HOT BIRD (11-03), Galaxy 31(11-12), Galaxy 32(11-12)
+  step 72 (day 2160, Y7) 10.22 t  n=4  EUTELSAT 10B(11-23), Galaxy 35(12-13), Galaxy 36(12-13), Meteosat 12(12-13)
+  step 73 (day 2190, Y7)  3.70 t  n=2  CBAS 2(01-15), LDPE 3A(01-15)
+  step 74 (day 2220, Y7)  4.00 t  n=1  Amazonas Nexus(02-07)
+  step 75 (day 2250, Y7)  8.90 t  n=3  Inmarsat 6 F2(02-18), SES 18(03-17), SES 19(03-17)
+  step 76 (day 2280, Y7)  3.38 t  n=1  Intelsat IS-40e(04-07)
+  step 77 (day 2310, Y7)  6.84 t  n=2  2023-060 소형위성 2기 통(05-01), Viasat-3 Americas(05-01)
+  step 78 (day 2340, Y7)  5.32 t  n=2  Badr 8(05-27), NVS-01(05-29)
+  step 79 (day 2370, Y7) 15.38 t  n=4  Nusantara Tiga(06-18), USA 345(06-22), Heinrich-Hertz-Sat(07-05), Syracuse 4B(07-05)
+  step 80 (day 2400, Y7) 12.16 t  n=2  Jupiter 3(07-29), Galaxy 37(08-03)
+  step 81 (day 2430, Y7)  3.60 t  n=3  USA 346(09-10), USA 347(09-10), USA 348(09-10)
+  step 85 (day 2550, Y8)  1.06 t  n=1  Ovzon 3(01-03)
+  step 87 (day 2610, Y8)  3.71 t  n=2  Insat 3DS(02-17), Merah Putih 2(02-20)
+  step 88 (day 2640, Y8)  9.45 t  n=2  EUTELSAT 36D(03-30), USA 353(04-09)
+  step 91 (day 2730, Y8)  9.78 t  n=3  Astra 1P(06-20), GOES 19(06-25), Turksat 6A(07-08)
+  step 92 (day 2760, Y8)  7.30 t  n=3  2024-134 소형위성 5기 통(07-30), USA 397(07-30), USA 398(07-30)
+  step 95 (day 2850, Y8)  4.91 t  n=2  Kirameki 3(11-04), Mugunghwa 6A(11-11)
+  step 96 (day 2880, Y9) 11.91 t  n=4  2024-252 소형위성 4기 통(12-29), Optus X(11-17), GSAT-20(11-18), SXM-9(12-05)
+  step 97 (day 2910, Y9)  4.40 t  n=1  Thuraya 4-NGS(01-04)
+  step 98 (day 2940, Y9)  8.25 t  n=2  Spainsat NG-1(01-30), Michibiki-6(02-02)
+  step 102 (day 3060, Y9)  3.60 t  n=1  SXM-10(06-07)
+  step 103 (day 3090, Y9)  2.66 t  n=1  Dror 1(07-13)
+  step 104 (day 3120, Y9)  1.85 t  n=2  2025-173 소형위성 2기 통(08-13), NTS 3(08-13)
+  step 105 (day 3150, Y9)  4.39 t  n=1  Nusantara Lima(09-12)
+  step 107 (day 3210, Y9) 11.62 t  n=3  Spainsat NG-2(10-24), CMS-03(11-02), Viasat-3 EMEA(11-14)
+
+========================================================================
+  10년치  2016 ~ 2025
+========================================================================
+
+--- make_geo_csv ---
+GEO 지향 발사 263 건 -> 페이로드 후보에서
+  최종목적지 GEO 아님 제외 : 21
+      S41896   Arase                      J       Arase(ERG): 426x32258 km HEO 자기권 과학위성, GEO 아님
+      S42928   IRNSS-R1H                  IN      로켓에서 분리 실패, 부착된 채 좌초 (Status=AR)
+      S43229   PODSAT                     US      PODSAT: 180x22165 km 에 머문 GTO 시험탑재체, 궤도상승 안 함
+      S43241   GSAT-6A                    IN      GSAT-6A: 3차 원지점분사 후 교신두절, 25977x36370 km 좌초 (전손)
+      S44482   TDO                        US      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=R)
+      S44493   Zhongxing 18               CN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+      S44049   B'reshit                   IL      심우주 이탈 (Status=DSO)
+      S44441   Chandrayaan-2              IN      심우주 이탈 (Status=DSO)
+      S45464   OrCa                       US      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=R)
+      S50505   GMM PN                     RU      로켓에서 분리 실패, 부착된 채 좌초 (Status=AR)
+      S47851   Shiyan 9                   CN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+      S48619   TDO 3                      US      TDO 3: MEO 캘리브레이션 타겟(20 kg), 재진입
+      S48620   TDO 4                      US      TDO 4: MEO 캘리브레이션 타겟(20 kg), 재진입
+      S57320   Chandrayaan-3              IN      심우주 이탈 (Status=DSA)
+      S57770   Chandrayaan-3 PM           IN      심우주 이탈 (Status=DSO)
+      S57754   Aditya-L1                  IN      심우주 이탈 (Status=DSO)
+      S59480   ADV.00.00.000-01           RU      GEO 미도달 후 재진입 (Status=R, OpOrbit=LLEO/I)
+      S59509   Gagarinets                 RU      GEO 미도달 후 재진입 (Status=R, OpOrbit=LLEO/I)
+      S62256   PROBA-3 CSC                I-ESA   PROBA-3 CSC: HEO 편대비행 미션, GEO 아님
+      S62258   PROBA-3 OSC                I-ESA   PROBA-3 OSC: HEO 편대비행 미션, GEO 아님
+      S62850   NVS-02                     IN      GEO 도달 실패, 전이궤도 좌초 (OpOrbit=GTO, Status=O)
+  중국/러시아 제외         : 121
+  => geo_satellites_2016_2025.csv : 221 satellites
+
+year       n     mass_t      dry_t      tot_t
+2016      29      121.8       69.0      121.7
+2017      27      127.7       67.7      127.7
+2018      27      108.0       54.4      108.0
+2019      15       73.9       39.1       73.9
+2020      13       54.4       32.4       54.4
+2021      13       50.4       32.7       50.4
+2022      40       81.0       57.1       81.0
+2023      21       74.9       53.0       75.0
+2024      24       65.4       43.6       65.4
+2025      12       53.5       35.1       53.5
+TOTAL    221      811.0      484.2      811.1
+/yr     22.1       81.1       48.4       81.1
+
+GCAT 추정치(flag=?) 포함 행 : 176 / 221
+
+--- 추진방식(satcat Motor 기준) ---
+  CHEM       129 기   추진제질량비 0.07 ~ 0.72 (중앙 0.47)
+  CHEM+ELEC    3 기   추진제질량비 0.35 ~ 0.35 (중앙 0.35)
+  ELEC        32 기   추진제질량비 0.00 ~ 0.50 (중앙 0.10)
+  RCS          8 기   추진제질량비 0.00 ~ 0.17 (중앙 0.00)
+  UNK         49 기   추진제질량비 0.00 ~ 0.60 (중앙 0.12)
+
+--- OrbPay(O.tsv) vs sum(TotMass)(satcat) 대조 : 263 발사 ---
+    완전일치 192 / 1%이내 198 / 5%이내 225
+    최종 CSV 에 포함된 발사 중 5% 초과 불일치 : 10 건
+      2024-234   SXM-9                      OrbPay=   4500 sumTot=   7000 diff=    2500 (55.6%) n=1
+      2024-134   USSF-51                    OrbPay=   5000 sumTot=   7300 diff=    2300 (46.0%) n=7
+      2025-205   Nusantara Lima             OrbPay=   5500 sumTot=   7800 diff=    2300 (41.8%) n=1
+      2022-144   LDPE-2                     OrbPay=   1443 sumTot=   2243 diff=     800 (55.4%) n=16
+      2024-212   Optus X                    OrbPay=   4500 sumTot=   4000 diff=    -500 (-11.1%) n=1
+      2018-012   SES-14/Al Yah 3            OrbPay=   8658 sumTot=   8218 diff=    -440 (-5.1%) n=2
+      2020-005   Eutelsat Konnect/GSAT-30   OrbPay=   7416 sumTot=   6976 diff=    -440 (-5.9%) n=2
+      2023-093   Heinrich Hertz/Syracuse    OrbPay=   7420 sumTot=   6980 diff=    -440 (-5.9%) n=2
+      2016-052   GSSAP 3/4                  OrbPay=   1160 sumTot=   1000 diff=    -160 (-13.8%) n=2
+      2025-173   NTS-3                      OrbPay=   2000 sumTot=   1850 diff=    -150 (-7.5%) n=3
+    -> mass_reconciliation_2016_2025.csv
+
+--- make_payload_mass ---
+geo_payload_demand_2016_2025.csv : 221 satellites
+
+class     n      wet_t  payload_t      dry_t    saved_t
+GEO      56       70.6       70.6       61.4        0.0
+GTO     129      595.6      367.7      323.5      227.9
+STO      36      144.8      106.7       99.3       38.0
+ALL     221      811.0      545.1      484.2      266.0
+
+payload_basis : {'rocket_eq': 165, 'direct_geo:tot_mass': 56}
+
+year      n      wet_t  payload_t
+2016     29      121.8       76.8
+2017     27      127.7       76.7
+2018     27      108.0       68.0
+2019     15       73.9       44.5
+2020     13       54.4       35.5
+2021     13       50.4       37.6
+2022     40       81.0       57.7
+2023     21       74.9       63.3
+2024     24       65.4       48.1
+2025     12       53.5       36.8
+
+--- applied dv ---
+   CC     GTO  CHEM       dv= 1805 m/s  Isp= 320  n=37
+   CC     GTO  CHEM+ELEC  dv= 1805 m/s  Isp= 320  n=3
+   CC     GTO  ELEC       dv= 2256 m/s  Isp=1800  n=4
+   CC     STO  CHEM       dv= 1530 m/s  Isp= 320  n=10
+   CC     STO  ELEC       dv= 2035 m/s  Isp=1800  n=16
+   CC     STO  RCS        dv= 1646 m/s  Isp= 320  n=1
+   CSG    GTO  CHEM       dv= 1490 m/s  Isp= 320  n=47
+   CSG    GTO  ELEC       dv= 1863 m/s  Isp=1800  n=7
+   CSG    STO  ELEC       dv= 1819 m/s  Isp=1800  n=1
+   KSC    GTO  CHEM       dv= 1805 m/s  Isp= 320  n=8
+   KSC    GTO  ELEC       dv= 2256 m/s  Isp=1800  n=1
+   KSC    STO  CHEM       dv= 1605 m/s  Isp= 320  n=5
+   KSC    STO  ELEC       dv= 2057 m/s  Isp=1800  n=2
+   SHAR   GTO  CHEM       dv= 1661 m/s  Isp= 320  n=13
+   TNSC   GTO  CHEM       dv= 1663 m/s  Isp= 320  n=9
+   TNSC   STO  ELEC       dv= 1952 m/s  Isp=1800  n=1
+
+below_gcat_dry : 49 / 165  (GCAT DryMass 가 라운드 추정치라 높게 잡힌 경우)
+
+--- 민감도: 총 payload [t] ---
+가정                              payload_t
+기준 (320s / 1800s / 1.25)            545.1
+화학 Isp 310s                         539.0
+화학 Isp 325s                         548.0
+전기 Isp 1600s                        543.5
+전기 Isp 2000s                        546.4
+저추력보정 1.0 (임펄시브)                    547.7
+저추력보정 1.5                           542.6
+
+--- make_demand_json ---
+[merge] 2016-052                  2기 ->  1000 kg  (USA 270 500, USA 271 500)
+[merge] 2018-036                  4기 ->   800 kg  (EAGLE 500, USA 285 100, USA 286 100, MYCROFT 100)
+[merge] 2021-118                  2기 ->   525 kg  (LDPE 1 500, ASCENT 25)
+[merge] 2022-006                  2기 ->  1000 kg  (USA 324 500, USA 325 500)
+[merge] 2022-073                  2기 ->   600 kg  (USSF 12 Ring 500, USA 337 100)
+[merge] 2022-144                 16기 ->  2244 kg  (LDPE 2 500, USA 339 500, USA 340 100, USA 341 100, LINUSS1 22, LINUSS2 22, USA 344 100, USA 399 100, USA 546 100, USA 547 100, USA 548 100, USA 551 100, USA 552 100, USA 553 100, USA 556 100, USA 557 100)
+[merge] 2023-060                  2기 ->   422 kg  (Arcturus 400, G-Space 1 22)
+[merge] 2024-134                  5기 ->   900 kg  (USA 396 500, USA 566 100, USA 567 100, USA 568 100, USA 569 100)
+[merge] 2024-252                  4기 ->  1424 kg  (UtilitySat 356, NuView Alpha 356, AGILA 356, NuView Bravo 356)
+[merge] 2025-173                  2기 ->   600 kg  (USA 554 500, USA 571 100)
+[merge] 총 41기가 10개 이벤트로 통합됨
+[shift] 전체 +30일, 연도 경계를 넘은 이벤트 27건 (year 재계산)
+C:\Users\User\Desktop\PL_Supply_Only_GTO\inputs\demand_hist_10yr_2016_2025.json
+  events 190   total 545.1 t
+
+year       n     mass_t       실제_t
+1         23       60.4       76.8   (2016)
+2         32       93.2       76.7   (2017)
+3         21       60.8       68.0   (2018)
+4         15       41.8       44.5   (2019)
+5         12       33.3       35.5   (2020)
+6         12       39.2       37.6   (2021)
+7         23       58.0       57.7   (2022)
+8         24       73.5       63.3   (2023)
+9         13       36.2       48.1   (2024)
+10        15       48.7       36.8   (2025)
+  TOT    190      545.1      545.1
+
+--- 스텝별 분포 (30일 격자, 총 120 스텝) ---
+  이벤트가 있는 스텝 : 77 / 120
+  스텝당 이벤트 수   : 최대 5, 평균 2.5
+  분포 : {1: 21, 2: 24, 3: 12, 4: 15, 5: 5}
+
+--- 스텝별 상세 ---
+  step  2 (day   60, Y1)  4.91 t  n=2  IRNSS-R1E(01-20), Intelsat IS-29e(01-27)
+  step  3 (day   90, Y1)  7.89 t  n=3  SES-9(03-04), EUTELSAT 65 WEST A(03-09), IRNSS-R1F(03-10)
+  step  5 (day  150, Y1)  3.48 t  n=2  IRNSS-R1G(04-28), JCSAT 2B(05-06)
+  step  6 (day  180, Y1) 11.89 t  n=4  Thaicom 8(05-27), USA 268(06-11), ABS-2A(06-15), EUTELSAT 117 WEST (06-15)
+  step  7 (day  210, Y1)  9.95 t  n=3  BRISat(06-18), Echostar XVIII(06-18), MUOS 5(06-24)
+  step  8 (day  240, Y1)  5.74 t  n=2  USA 269(07-28), JCSAT 16(08-14)
+  step  9 (day  270, Y1)  8.40 t  n=4  2016-052 소형위성 2기 통(08-19), Intelsat IS-36(08-24), Intelsat IS-33e(08-24), Insat 3DR(09-08)
+  step 10 (day  300, Y1)  6.10 t  n=2  GSAT-18(10-05), Sky Muster II(10-05)
+  step 11 (day  330, Y1)  2.06 t  n=1  Himawari-9(11-02)
+  step 12 (day  360, Y2) 16.41 t  n=5  GOES 16(11-19), WGS SV-8(12-07), Echostar 19(12-18), JCSAT 15(12-21) ...
+  step 14 (day  420, Y2) 11.57 t  n=4  SBIRS GEO-4(01-21), Kirameki 2(01-24), Telkom-3S(02-14), SkyBrasil-1(02-14)
+  step 15 (day  450, Y2)  3.15 t  n=1  Echostar 23(03-16)
+  step 16 (day  480, Y2)  6.36 t  n=2  WGS SV-9(03-19), SES-10(03-30)
+  step 17 (day  510, Y2) 10.70 t  n=4  Koreasat 7(05-04), SGDC(05-04), South Asia Satelli(05-05), Inmarsat 5F4(05-15)
+  step 18 (day  540, Y2) 11.40 t  n=4  Michibiki-2(06-01), ViaSat-2(06-01), EUTELSAT 172B(06-01), GSAT-19E(06-05)
+  step 19 (day  570, Y2) 11.95 t  n=4  BulgariaSat-1(06-23), Hellas Sat 3-Inmar(06-28), GSAT-17(06-28), Intelsat IS-35e(07-05)
+  step 21 (day  630, Y2)  4.71 t  n=2  TDRS 13(08-18), Michibiki-3(08-19)
+  step 22 (day  660, Y2) 14.75 t  n=5  USA 279(10-15), Intelsat IS-37e(09-29), BSAT-4a(09-29), Michibiki-4(10-09) ...
+  step 23 (day  690, Y2)  2.15 t  n=1  Mugunghwa 5A(10-30)
+  step 26 (day  780, Y3) 11.23 t  n=4  SBIRS GEO-3(01-20), Al Yah 3(01-25), SES-14(01-25), GovSat-1(01-31)
+  step 27 (day  810, Y3)  6.35 t  n=2  GOES 17(03-01), Hispasat 30W-6(03-06)
+  step 28 (day  840, Y3) 10.47 t  n=5  2018-036 소형위성 4기 통(04-14), Kirameki 1(04-05), Hylas 4(04-05), IRNSS-R1I(04-11) ...
+  step 29 (day  870, Y3)  2.08 t  n=1  Bangabandhu 1(05-11)
+  step 30 (day  900, Y3)  4.80 t  n=1  SES-12(06-04)
+  step 32 (day  960, Y3)  7.25 t  n=2  Telstar 19 Vantage(07-22), Merah Putih(08-07)
+  step 33 (day  990, Y3)  3.97 t  n=1  Telstar 18 Vantage(09-10)
+  step 34 (day 1020, Y3)  6.18 t  n=2  Azerspace-2(09-25), Horizons 3e(09-25)
+  step 35 (day 1050, Y3)  8.49 t  n=3  AEHF SV-4(10-17), GSAT-29(11-14), Es'hailsat-2(11-15)
+  step 36 (day 1080, Y4)  7.15 t  n=3  Cheollian 2A(12-04), GSAT-11(12-04), GSAT-7A(12-19)
+  step 38 (day 1140, Y4)  5.62 t  n=2  SGS-1(02-05), GSAT-31(02-05)
+  step 39 (day 1170, Y4)  6.41 t  n=3  Nusantara Satu(02-22), S5(02-22), WGS SV-10(03-16)
+  step 40 (day 1200, Y4)  3.95 t  n=1  Arabsat 6A(04-11)
+  step 43 (day 1290, Y4)  6.05 t  n=2  T16(06-20), EUTELSAT 7C(06-20)
+  step 44 (day 1320, Y4) 12.67 t  n=4  EDRS C(08-06), Intelsat IS-39(08-06), Amos 17(08-06), AEHF SV-5(08-08)
+  step 48 (day 1440, Y5)  9.80 t  n=3  Tiba 1(11-26), Inmarsat GX5(11-26), JCSAT 18/Kacific 1(12-17)
+  step 49 (day 1470, Y5)  5.34 t  n=2  GSAT-30(01-16), Eutelsat Konnect(01-16)
+  step 51 (day 1530, Y5)  5.75 t  n=2  JCSAT 17(02-18), Cheollian 2B(02-18)
+  step 52 (day 1560, Y5)  3.49 t  n=1  AEHF SV-6(03-26)
+  step 56 (day 1680, Y5)  8.93 t  n=4  ANASIS-II(07-20), BSAT-4b(08-15), MEV-2(08-15), Galaxy 30(08-15)
+  step 60 (day 1800, Y6) 12.01 t  n=4  Deta chukei eisei (11-29), USA 311(12-11), SXM-7(12-13), CMS 1(12-17)
+  step 61 (day 1830, Y6)  3.12 t  n=1  Turksat 5A(01-08)
+  step 66 (day 1980, Y6)  6.47 t  n=2  SBIRS GEO-5(05-18), SXM-8(06-06)
+  step 68 (day 2040, Y6)  6.00 t  n=2  Star One D2(07-30), Eutelsat Quantum(07-30)
+  step 71 (day 2130, Y6) 11.60 t  n=3  SES-17(10-24), Syracuse 4A(10-24), Michibiki Shogoki (10-26)
+  step 72 (day 2160, Y7) 10.44 t  n=4  2021-118 소형위성 2기 통(12-07), STPSAT-6(12-07), Turksat 5B(12-19), Inmarsat 6 F1(12-22)
+  step 74 (day 2220, Y7)  1.00 t  n=1  2022-006 소형위성 2기 통(01-21)
+  step 75 (day 2250, Y7)  2.93 t  n=1  GOES 18(03-01)
+  step 78 (day 2340, Y7)  2.22 t  n=1  Nilesat 301(06-08)
+  step 79 (day 2370, Y7) 11.68 t  n=5  2022-073 소형위성 2기 통(07-01), GSAT-24(06-22), Measat 3D(06-22), SES-22(06-29) ...
+  step 80 (day 2400, Y7)  2.53 t  n=1  SBIRS GEO-6(08-04)
+  step 81 (day 2430, Y7)  5.86 t  n=1  Eutelsat Konnect V(09-07)
+  step 82 (day 2460, Y7) 11.39 t  n=5  SES-20(10-04), SES-21(10-04), Galaxy 33(10-08), Galaxy 34(10-08) ...
+  step 83 (day 2490, Y7)  9.90 t  n=4  2022-144 소형위성 16기 (11-01), EUTELSAT HOT BIRD (11-03), Galaxy 31(11-12), Galaxy 32(11-12)
+  step 84 (day 2520, Y8) 10.22 t  n=4  EUTELSAT 10B(11-23), Galaxy 35(12-13), Galaxy 36(12-13), Meteosat 12(12-13)
+  step 85 (day 2550, Y8)  3.70 t  n=2  CBAS 2(01-15), LDPE 3A(01-15)
+  step 86 (day 2580, Y8)  4.00 t  n=1  Amazonas Nexus(02-07)
+  step 87 (day 2610, Y8)  8.90 t  n=3  Inmarsat 6 F2(02-18), SES 18(03-17), SES 19(03-17)
+  step 88 (day 2640, Y8)  3.38 t  n=1  Intelsat IS-40e(04-07)
+  step 89 (day 2670, Y8)  6.84 t  n=2  2023-060 소형위성 2기 통(05-01), Viasat-3 Americas(05-01)
+  step 90 (day 2700, Y8)  5.32 t  n=2  Badr 8(05-27), NVS-01(05-29)
+  step 91 (day 2730, Y8) 15.38 t  n=4  Nusantara Tiga(06-18), USA 345(06-22), Heinrich-Hertz-Sat(07-05), Syracuse 4B(07-05)
+  step 92 (day 2760, Y8) 12.16 t  n=2  Jupiter 3(07-29), Galaxy 37(08-03)
+  step 93 (day 2790, Y8)  3.60 t  n=3  USA 346(09-10), USA 347(09-10), USA 348(09-10)
+  step 97 (day 2910, Y9)  1.06 t  n=1  Ovzon 3(01-03)
+  step 99 (day 2970, Y9)  3.71 t  n=2  Insat 3DS(02-17), Merah Putih 2(02-20)
+  step 100 (day 3000, Y9)  9.45 t  n=2  EUTELSAT 36D(03-30), USA 353(04-09)
+  step 103 (day 3090, Y9)  9.78 t  n=3  Astra 1P(06-20), GOES 19(06-25), Turksat 6A(07-08)
+  step 104 (day 3120, Y9)  7.30 t  n=3  2024-134 소형위성 5기 통(07-30), USA 397(07-30), USA 398(07-30)
+  step 107 (day 3210, Y9)  4.91 t  n=2  Kirameki 3(11-04), Mugunghwa 6A(11-11)
+  step 108 (day 3240, Y10) 11.91 t  n=4  2024-252 소형위성 4기 통(12-29), Optus X(11-17), GSAT-20(11-18), SXM-9(12-05)
+  step 109 (day 3270, Y10)  4.40 t  n=1  Thuraya 4-NGS(01-04)
+  step 110 (day 3300, Y10)  8.25 t  n=2  Spainsat NG-1(01-30), Michibiki-6(02-02)
+  step 114 (day 3420, Y10)  3.60 t  n=1  SXM-10(06-07)
+  step 115 (day 3450, Y10)  2.66 t  n=1  Dror 1(07-13)
+  step 116 (day 3480, Y10)  1.85 t  n=2  2025-173 소형위성 2기 통(08-13), NTS 3(08-13)
+  step 117 (day 3510, Y10)  4.39 t  n=1  Nusantara Lima(09-12)
+  step 119 (day 3570, Y10) 11.62 t  n=3  Spainsat NG-2(10-24), CMS-03(11-02), Viasat-3 EMEA(11-14)

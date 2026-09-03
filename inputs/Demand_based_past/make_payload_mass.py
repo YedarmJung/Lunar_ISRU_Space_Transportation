@@ -37,6 +37,7 @@ geo_satellites_2019_2025.csv  ->  OTV 가 실제로 GEO 까지 날라야 할 페
   따라서 하한처리 없이 로켓방정식 값을 쓰고, DryMass 보다 작은 경우만
   below_gcat_dry 플래그로 표시한다.
 """
+import argparse
 import collections
 import csv
 import io
@@ -44,9 +45,9 @@ import math
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, 'geo_satellites_2019_2025.csv')
 LAUNCH = os.path.join(HERE, 'O.tsv')
-DST = os.path.join(HERE, 'geo_payload_demand_2019_2025.csv')
+YEAR_MIN, YEAR_MAX = 2019, 2025          # main() 에서 CLI 인자로 덮어쓴다
+SRC = DST = None                          # main() 에서 결정
 
 MU, RE, RGEO = 398600.4418, 6378.137, 42164.0
 VGEO = math.sqrt(MU / RGEO)
@@ -62,6 +63,7 @@ SITE_GTO = {
     'CC':   (185.0, 35786.0, 27.0),   # Cape Canaveral, Falcon 9 / Atlas / Delta / Vulcan
     'KSC':  (185.0, 35786.0, 27.0),   # Kennedy,        Falcon Heavy
     'TNSC': (250.0, 35786.0, 20.1),   # Tanegashima,    H-IIA/H3 long-coast
+    'USC':  (250.0, 35786.0, 31.0),   # Uchinoura,      Epsilon
     'SHAR': (170.0, 35975.0, 19.3),   # Sriharikota,    GSLV / LVM3 / PSLV
 }
 DEFAULT_SITE = (200.0, 35786.0, 25.0)
@@ -172,7 +174,22 @@ def tsum(rs, k):
     return sum(num(x[k]) or 0.0 for x in rs) / 1000.0
 
 
-def main():
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--start-year', type=int, default=2019)
+    ap.add_argument('--end-year', type=int, default=2025)
+    return ap.parse_args()
+
+
+def main(start_year=None, end_year=None):
+    global YEAR_MIN, YEAR_MAX, SRC, DST
+    if start_year is not None:
+        YEAR_MIN = start_year
+    if end_year is not None:
+        YEAR_MAX = end_year
+    SRC = os.path.join(HERE, 'geo_satellites_%d_%d.csv' % (YEAR_MIN, YEAR_MAX))
+    DST = os.path.join(HERE, 'geo_payload_demand_%d_%d.csv' % (YEAR_MIN, YEAR_MAX))
+
     out, fields = build()
     with io.open(DST, 'w', encoding='utf-8-sig', newline='') as f:
         w = csv.DictWriter(f, fieldnames=fields)
@@ -195,7 +212,7 @@ def main():
     print('payload_basis :', dict(collections.Counter(x['payload_basis'] for x in out)))
     print()
     print('%-6s %4s %10s %10s' % ('year', 'n', 'wet_t', 'payload_t'))
-    for y in range(2019, 2026):
+    for y in range(YEAR_MIN, YEAR_MAX + 1):
         sub = [x for x in out if int(x['year']) == y]
         print('%-6d %4d %10.1f %10.1f' % (y, len(sub), tsum(sub, 'mass_kg'),
                                           tsum(sub, 'payload_mass_kg')))
@@ -236,7 +253,9 @@ def main():
     ISP['CHEM'] = ISP['CHEM+ELEC'] = base_chem
     ISP['ELEC'] = base_elec
     LOW_THRUST_FACTOR['ELEC'] = base_ltf
+    return DST
 
 
 if __name__ == '__main__':
-    main()
+    _a = parse_args()
+    main(_a.start_year, _a.end_year)

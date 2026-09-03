@@ -29,6 +29,7 @@ GCAT satcat.tsv + O.tsv  ->  2019~2025 GEO 위성 목록 CSV (위성 1기 = 1행
   tot_mass_kg  TotMass : 발사시 총질량 (원지점 킥모터/어댑터 등 포함)
   prop_mass_kg         : mass_kg - dry_mass_kg (파생값)
 """
+import argparse
 import collections
 import csv
 import datetime as dt
@@ -38,9 +39,8 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 SATCAT = os.path.join(HERE, 'satcat.tsv')
 LAUNCH = os.path.join(HERE, 'O.tsv')
-DST = os.path.join(HERE, 'geo_satellites_2019_2025.csv')
 
-YEAR_MIN, YEAR_MAX = 2019, 2025
+YEAR_MIN, YEAR_MAX = 2019, 2025          # main() 에서 CLI 인자로 덮어쓴다
 EPOCH = dt.date(YEAR_MIN, 1, 1)
 GEO_BOUND_CLASSES = ('GTO', 'GEO', 'STO')
 
@@ -52,7 +52,8 @@ MONTHS = {m: i + 1 for i, m in enumerate(
 EXCLUDE_STATES = {'CN', 'RU', 'SU'}
 EXCLUDE_MANUFACTURERS = {
     'CAST', 'SAST', 'CASC', 'CALT', 'DFH', 'CGWIC', 'CASIC', 'SHMIT',   # 중국
-    'RESH', 'NPOL', 'ISS-R', 'NPOM', 'KHRU', 'LAVOCH', 'VNIIEM', 'PO POLYOT',  # 러시아
+    'RESH', 'NPOL', 'ISS-R', 'NPOM', 'KHRU', 'LAVOCH', 'VNIIEM', 'PO POLYOT',
+    'RKKE', 'RKTS', 'NPOPM',                                              # 러시아
 }
 LV_COUNTRY = [
     ('Chang Zheng', 'CN'), ('Kuaizhou', 'CN'), ('Jielong', 'CN'), ('Zhuque', 'CN'),
@@ -70,10 +71,13 @@ EXCLUDE_LV_COUNTRIES = {'CN', 'RU'}
 
 # ---- 최종 목적지가 GEO 가 아닌 페이로드 제거 --------------------------------
 # 심우주로 이탈 (GEO/GTO 를 경유만 함)
-DROP_STATUS = {'DSO', 'DSA'}
+DROP_STATUS = {'DSO', 'DSA', 'AR'}   # AR = 로켓에 부착된 채 분리 실패
 # GEO 도달 실패 후 전이궤도에 좌초
 DROP_OPORBIT = {'GTO'}
 DROP_JCAT = {
+    'S41896': 'Arase(ERG): 426x32258 km HEO 자기권 과학위성, GEO 아님',
+    'S43229': 'PODSAT: 180x22165 km 에 머문 GTO 시험탑재체, 궤도상승 안 함',
+    'S43241': 'GSAT-6A: 3차 원지점분사 후 교신두절, 25977x36370 km 좌초 (전손)',
     'S62256': 'PROBA-3 CSC: HEO 편대비행 미션, GEO 아님',
     'S62258': 'PROBA-3 OSC: HEO 편대비행 미션, GEO 아님',
     'S48619': 'TDO 3: MEO 캘리브레이션 타겟(20 kg), 재진입',
@@ -90,11 +94,12 @@ NOTES = {
 # satcat 의 Motor 컬럼 값만 사용한다. 값이 없으면 UNK 로 두고 추정하지 않는다.
 MOTOR_PREFIX_TYPE = [
     ('XPS/PPS', 'ELEC'), ('PPS-', 'ELEC'), ('SPT', 'ELEC'),   # Safran / Fakel 홀추력기
+    ('XIPS', 'ELEC'), ('BHT', 'ELEC'), ('T6', 'ELEC'),        # Boeing XIPS / Busek / QinetiQ
     ('EOR', 'ELEC'), ('EP', 'ELEC'),                          # electric orbit raising
     ('BT-4/AJ-EP', 'CHEM+ELEC'),                              # 화학 원지점분사 + 전기 위치유지
     ('R-4D', 'CHEM'), ('S400', 'CHEM'), ('S-400', 'CHEM'),    # 이원추진 원지점엔진
     ('BT-4', 'CHEM'), ('IHI BT-4', 'CHEM'), ('Leros', 'CHEM'),
-    ('ISRO LAM', 'CHEM'), ('LAPS', 'CHEM'),
+    ('ISRO LAM', 'CHEM'), ('LAPS', 'CHEM'), ('DFH', 'CHEM'), ('LAE', 'CHEM'),
     ('AOCS', 'RCS'),                                          # 원지점엔진 없이 RCS 만
 ]
 
@@ -112,7 +117,7 @@ def prop_type(motor):
 FIELDS = [
     'jcat', 'satcat', 'launch_tag', 'piece',
     'name', 'pl_name',
-    'launch_date', 'year', 'doy', 'day_since_2019',
+    'launch_date', 'year', 'doy', 'day_since_epoch',
     'state', 'owner', 'manufacturer', 'bus', 'motor', 'prop_type',
     'mass_kg', 'mass_flag', 'dry_mass_kg', 'dry_flag', 'tot_mass_kg', 'tot_flag',
     'prop_mass_kg', 'prop_mass_frac', 'mass_is_estimate',
@@ -190,6 +195,8 @@ def is_cn_ru(sat, lv):
 def not_geo_reason(s):
     if s['JCAT'] in DROP_JCAT:
         return DROP_JCAT[s['JCAT']]
+    if s['Status'] == 'AR':
+        return '로켓에서 분리 실패, 부착된 채 좌초 (Status=AR)'
     if s['Status'] in DROP_STATUS:
         return '심우주 이탈 (Status=%s)' % s['Status']
     if s['OpOrbit'] in DROP_OPORBIT:
@@ -207,7 +214,7 @@ def to_record(s, lr, d):
         'launch_tag': s['Launch_Tag'], 'piece': s['Piece'],
         'name': s['Name'], 'pl_name': s['PLName'],
         'launch_date': d.isoformat(), 'year': d.year,
-        'doy': d.timetuple().tm_yday, 'day_since_2019': (d - EPOCH).days,
+        'doy': d.timetuple().tm_yday, 'day_since_epoch': (d - EPOCH).days,
         'state': s['State'], 'owner': s['Owner'],
         'manufacturer': s['Manufacturer'], 'bus': s['Bus'], 'motor': s['Motor'],
         'prop_type': prop_type(s['Motor']),
@@ -228,7 +235,22 @@ def to_record(s, lr, d):
     }
 
 
-def main():
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--start-year', type=int, default=2019)
+    ap.add_argument('--end-year', type=int, default=2025)
+    return ap.parse_args()
+
+
+def main(start_year=None, end_year=None):
+    global YEAR_MIN, YEAR_MAX, EPOCH
+    if start_year is not None:
+        YEAR_MIN = start_year
+    if end_year is not None:
+        YEAR_MAX = end_year
+    EPOCH = dt.date(YEAR_MIN, 1, 1)
+    dst = os.path.join(HERE, 'geo_satellites_%d_%d.csv' % (YEAR_MIN, YEAR_MAX))
+
     launches = {}
     for r in read_tsv(LAUNCH):
         d = parse_date(r['Launch_Date'])
@@ -254,7 +276,7 @@ def main():
 
     keep.sort(key=lambda x: (x['launch_date'], x['launch_tag'], x['jcat']))
 
-    with io.open(DST, 'w', encoding='utf-8-sig', newline='') as f:
+    with io.open(dst, 'w', encoding='utf-8-sig', newline='') as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         for rec in keep:
@@ -265,7 +287,7 @@ def main():
     for s, why in sorted(drop_nongeo, key=lambda x: x[0]['LDate']):
         print('      %-8s %-26s %-6s  %s' % (s['JCAT'], s['Name'][:26], s['State'], why))
     print('  중국/러시아 제외         : %d' % len(drop_cnru))
-    print('  => %s : %d satellites' % (os.path.basename(DST), len(keep)))
+    print('  => %s : %d satellites' % (os.path.basename(dst), len(keep)))
     print()
 
     span = YEAR_MAX - YEAR_MIN + 1
@@ -295,6 +317,7 @@ def main():
             if fr else '-'))
 
     reconcile(launches, keep)
+    return dst
 
 
 def reconcile(launches, keep):
@@ -326,7 +349,7 @@ def reconcile(launches, keep):
             'in_final_csv': 1 if t in kept_tags else 0,
         })
 
-    path = os.path.join(HERE, 'mass_reconciliation_2019_2025.csv')
+    path = os.path.join(HERE, 'mass_reconciliation_%d_%d.csv' % (YEAR_MIN, YEAR_MAX))
     with io.open(path, 'w', encoding='utf-8-sig', newline='') as f:
         w = csv.DictWriter(f, fieldnames=list(out[0].keys()))
         w.writeheader()
@@ -353,4 +376,5 @@ def reconcile(launches, keep):
 
 
 if __name__ == '__main__':
-    main()
+    _a = parse_args()
+    main(_a.start_year, _a.end_year)
