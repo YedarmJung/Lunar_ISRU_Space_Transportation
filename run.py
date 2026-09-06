@@ -18,14 +18,14 @@ RESULT_DIR = Path("results")
 DEMAND_PROFILE_PATH = Path("inputs") / "demand_hist_9yr_2017_2025.json"
 # Point this at a .mst produced by make_warm_start.py to warm start the solve.
 # Leave it as None to start from scratch.
-#WARM_START_PATH = Path("results/plots_20260828_161439/start.mst")
+#WARM_START_PATH = Path("results/plots_20260902_163755_9yr/start.mst")
 GUROBI_PARAMS = {
     "TimeLimit": 14 * 3600,
-    "MIPGap": 0.025,
-    "MIPFocus": 1,
-    "Cuts": 2,
-    "Symmetry": 2,
-    "Heuristics": 0.2,
+    #"MIPGap": 0.025,
+    #"MIPFocus": 1,
+    #"Cuts": 2,
+    #"Symmetry": 2,
+    #"Heuristics": 0.2,
     #"Presolve" : 2,
 }
 

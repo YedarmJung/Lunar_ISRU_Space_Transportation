@@ -123,7 +123,7 @@ def build_model(data, gurobi_params=None):
                     continue
 
                 spacecraft_index.append((v, a, t))
-    y = m.addVars(spacecraft_index, lb=0, ub=5, vtype=GRB.INTEGER, name="y")
+    y = m.addVars(spacecraft_index, lb=0, ub=2, vtype=GRB.INTEGER, name="y")
 
     # 각 년도에 새로 배치될 vehicles
     N_sc = m.addVars(

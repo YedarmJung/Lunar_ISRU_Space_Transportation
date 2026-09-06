@@ -23,7 +23,7 @@ from model import build_model
 
 
 # The saved solution to build the MIP start from.
-SOLUTION_PATH = Path("results") / "plots_20260828_161439" / "latest_solution.json"
+SOLUTION_PATH = Path("results") / "plots_20260903_144432" / "latest_solution.json"
 # Where to write the .mst.  None -> start.mst next to the solution above.
 OUTPUT_PATH = None
 

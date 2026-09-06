@@ -128,10 +128,11 @@ def get_data(profile_path):
     """Build the full-horizon network from an explicit payload-demand profile."""
     profile = _load_demand_profile(profile_path)
 
-    nodes = ["GEO", "GTO", "EML1", "NRHO", "LLO", "Moon"]
+    #nodes = ["GEO", "GTO", "EML1", "NRHO", "LLO", "Moon"]
     commodities = ["PL", "H2O", "Prop", "H2O_Tank", "Prop_Tank", "Infra"]
-    depot_node = ["Moon", "GEO", "GTO", "EML1", "NRHO", "LLO"]
-
+    #depot_node = ["Moon", "GEO", "GTO", "EML1", "NRHO", "LLO"]
+    nodes = ["GEO", "GTO", "LLO", "Moon"]
+    depot_node = ["Moon", "GEO", "GTO", "LLO"]
     mission_years = int(profile["mission_years"])
     days_per_year = int(profile["days_per_year"])
     days_per_step = int(profile["days_per_step"])
@@ -182,27 +183,27 @@ def get_data(profile_path):
         arcs.append(Arc(node, node, 1, "hold", all_hold_times, 0))
 
     add_two_way(arcs, "GEO", "GTO", 1, periods(T, 1), delta_v_km_s=1.47)
-    add_two_way(arcs, "GEO", "EML1", 1, periods(T, 1), delta_v_km_s=1.38)
-    add_two_way(arcs, "GEO", "NRHO", 1, periods(T, 1), delta_v_km_s=1.47)
+    #add_two_way(arcs, "GEO", "EML1", 1, periods(T, 1), delta_v_km_s=1.38)
+    #add_two_way(arcs, "GEO", "NRHO", 1, periods(T, 1), delta_v_km_s=1.47)
     add_two_way(arcs, "GEO", "LLO", 1, periods(T, 1), delta_v_km_s=2.05)
     add_two_way(arcs, "GEO", "Moon", 1, periods(T, 1), delta_v_km_s=3.92)
 
-    add_two_way(arcs, "GTO", "EML1", 1, periods(T, 1), delta_v_km_s=1.31)
-    add_two_way(arcs, "GTO", "NRHO", 1, periods(T, 1), delta_v_km_s=1.1)
+    #add_two_way(arcs, "GTO", "EML1", 1, periods(T, 1), delta_v_km_s=1.31)
+    #add_two_way(arcs, "GTO", "NRHO", 1, periods(T, 1), delta_v_km_s=1.1)
     add_two_way(arcs, "GTO", "LLO", 1, periods(T, 1), delta_v_km_s=1.58)
     add_two_way(arcs, "GTO", "Moon", 1, periods(T, 1), delta_v_km_s=3.47)
 
-    add_two_way(arcs, "EML1", "NRHO", 1, periods(T, 1), delta_v_km_s=0.2)
-    add_two_way(arcs, "EML1", "LLO", 1, periods(T, 1), delta_v_km_s=0.64)
-    add_two_way(arcs, "EML1", "Moon", 1, periods(T, 1), delta_v_km_s=2.51)
+    #add_two_way(arcs, "EML1", "NRHO", 1, periods(T, 1), delta_v_km_s=0.2)
+    #add_two_way(arcs, "EML1", "LLO", 1, periods(T, 1), delta_v_km_s=0.64)
+    #add_two_way(arcs, "EML1", "Moon", 1, periods(T, 1), delta_v_km_s=2.51)
 
-    add_two_way(arcs, "NRHO", "LLO", 1, periods(T, 1), delta_v_km_s=0.73)
-    add_two_way(arcs, "NRHO", "Moon", 1, periods(T, 1), delta_v_km_s=2.6)
+    #add_two_way(arcs, "NRHO", "LLO", 1, periods(T, 1), delta_v_km_s=0.73)
+    #add_two_way(arcs, "NRHO", "Moon", 1, periods(T, 1), delta_v_km_s=2.6)
     add_two_way(arcs, "LLO", "Moon", 1, periods(T, 1), delta_v_km_s=1.87)
 
     #BLT orbit
 
-    add_two_way(arcs, "GTO", "NRHO", 4, periods(T, 4), delta_v_km_s=0.75)
+    #add_two_way(arcs, "GTO", "NRHO", 4, periods(T, 4), delta_v_km_s=0.75)
     add_two_way(arcs, "GTO", "LLO", 4, periods(T, 4), delta_v_km_s=1.48)
         
 
