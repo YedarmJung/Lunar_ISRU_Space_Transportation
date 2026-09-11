@@ -18,8 +18,8 @@ RESULT_DIR = Path("results")
 TIME_PER_ITER = 150
 TOTAL_TIME = 3 * 3600
 IMPROVEMENT_TOL = 1e-6
-WINDOW = 8
-STEP = 4
+WINDOW = 6
+STEP = 3
 
 #결과 폴더 생성
 def make_run_dir():
@@ -31,6 +31,15 @@ def make_run_dir():
         run_dir = RESULT_DIR / f"lns_{timestamp}_{suffix:02d}"
     run_dir.mkdir(parents=True)
     return run_dir
+
+
+def make_logger(log_path):
+    def log(message=""):
+        print(message, flush=True)
+        with log_path.open("a", encoding="utf-8") as file:
+            print(message, file=file, flush=True)
+
+    return log
 
 
 def save_best(data, model, variables, all_vars, best_values, run_dir):
@@ -50,6 +59,7 @@ def save_best(data, model, variables, all_vars, best_values, run_dir):
 def main():
     overall_start = time.perf_counter()
     run_dir = make_run_dir()
+    log = make_logger(run_dir / "solver.log")
 
     data = get_data(DEMAND_PROFILE_PATH)
     model, variables = build_model(
@@ -92,12 +102,12 @@ def main():
     if window_starts[-1] != last_start:
         window_starts.append(last_start)
 
-    print(f"Initial objective: {start_obj:,.5f} MUSD")
-    print(
+    log(f"Initial objective: {start_obj:,.5f} MUSD")
+    log(
         f"y vars: {len(y):,} | window: {window} | step: {step} | "
         f"budget: {TOTAL_TIME / 3600:.1f} h"
     )
-    print(f"Artifacts: {run_dir}")
+    log(f"Artifacts: {run_dir}")
 
     iteration = 0
     improvements = 0
@@ -142,14 +152,14 @@ def main():
             obj_text = "none" if candidate_obj is None else f"{candidate_obj:.5f}"
             change = 100.0 * (best_obj / start_obj - 1.0)
             marker = " *" if improved else ""
-            print(
+            log(
                 f"iter {iteration:3d} | window [{current_t0:3d}, {t1:3d}) | "
                 f"free_y {free_y:4d} | obj {obj_text:>10} | "
                 f"best {best_obj:.5f} ({change:+.3f}%) | "
                 f"{time.perf_counter() - iter_start:.0f}s{marker}"
             )
             if solve_status == GRB.INTERRUPTED:
-                print("\nInterrupted; the best checkpoint has been kept.")
+                log("\nInterrupted; the best checkpoint has been kept.")
                 break
 
     except KeyboardInterrupt:
@@ -160,17 +170,17 @@ def main():
             best_values = model.getAttr(GRB.Attr.X, all_vars)
             improvements += 1
             save_best(data, model, variables, all_vars, best_values, run_dir)
-        print("\nInterrupted; the best checkpoint has been kept.")
+        log("\nInterrupted; the best checkpoint has been kept.")
 
     elapsed = time.perf_counter() - overall_start
     improvement_pct = 100.0 * (start_obj - best_obj) / start_obj
-    print("\nLNS finished")
-    print(f"  objective   : {start_obj:,.5f} -> {best_obj:,.5f} MUSD")
-    print(f"  improvement : {improvement_pct:.3f}%")
-    print(f"  iterations  : {iteration} ({improvements} improving)")
-    print(f"  elapsed     : {elapsed / 3600:.2f} h")
-    print(f"  solution    : {run_dir / 'latest_solution.json'}")
-    print(f"  MIP start   : {run_dir / 'final.mst'}")
+    log("\nLNS finished")
+    log(f"  objective   : {start_obj:,.5f} -> {best_obj:,.5f} MUSD")
+    log(f"  improvement : {improvement_pct:.3f}%")
+    log(f"  iterations  : {iteration} ({improvements} improving)")
+    log(f"  elapsed     : {elapsed / 3600:.2f} h")
+    log(f"  solution    : {run_dir / 'latest_solution.json'}")
+    log(f"  MIP start   : {run_dir / 'final.mst'}")
 
 
 if __name__ == "__main__":

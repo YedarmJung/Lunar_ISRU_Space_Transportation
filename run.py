@@ -20,7 +20,7 @@ DEMAND_PROFILE_PATH = Path("inputs") / "demand_hist_9yr_2017_2025.json"
 # Leave it as None to start from scratch.
 #WARM_START_PATH = Path("results/plots_20260902_163755_9yr/start.mst")
 GUROBI_PARAMS = {
-    "TimeLimit": 14 * 3600,
+    "TimeLimit": 6 * 3600,
     #"MIPGap": 0.025,
     #"MIPFocus": 1,
     #"Cuts": 2,

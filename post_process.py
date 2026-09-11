@@ -5,7 +5,7 @@ from pathlib import Path
 from units import MODEL_UNITS, SOLUTION_SCHEMA_VERSION
 
 
-RESULT_DIR = Path("results")
+RESULT_DIR = Path("results/lns2_20260904_150738")
 LEGACY_SOLUTION = RESULT_DIR / "latest_solution.json"
 LEGACY_PLOT_DIR = RESULT_DIR / "plots"
 

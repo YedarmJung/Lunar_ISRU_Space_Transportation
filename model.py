@@ -80,7 +80,14 @@ def build_model(data, gurobi_params=None):
             continue
         for v in allowed_modes:
             if v == "OTV" and (arc.tail in LUNAR_NODES or arc.head in LUNAR_NODES):
-                continue 
+                continue
+            if v == "OTV" and arc.tail == "GTO" and arc.head == "NRHO" and arc.tau == 1:
+                continue
+            if v == "RT":
+                if arc.tail == "GEO" and arc.head in {"GTO", "NRHO", "LLO", "Moon"}:
+                    continue
+                elif arc.head == "GEO" and arc.tail in {"GTO", "NRHO"}:
+                    continue
             # 2) mode별 허용 commodity 선택
             if arc.kind == "move":
                 if v == "OTV":
@@ -113,22 +120,37 @@ def build_model(data, gurobi_params=None):
 
     spacecraft_index=[]
     #spacecraft variables
+    # 안만들 아크는 if 문 후 continue로 넣기
+
+    allowed_modes = ["OTV", "RT"]
     for a, arc in enumerate(arcs):
-        allowed_modes = ["OTV", "RT"]
         for v in allowed_modes:
             if v == "OTV" and (arc.tail in LUNAR_NODES or arc.head in LUNAR_NODES):
                 continue
+            if v == "OTV" and arc.tail == "GTO" and arc.head == "NRHO" and arc.tau == 1:
+                continue
+            if v == "RT":
+                if arc.tail == "GEO" and arc.head in {"GTO", "NRHO", "LLO", "Moon"}:
+                    continue
+                elif arc.head == "GEO" and arc.tail in {"GTO", "NRHO"}:
+                    continue
             for t in arc.active_times:
                 if t + arc.tau > T - 1:
                     continue
 
                 spacecraft_index.append((v, a, t))
+
     y = m.addVars(spacecraft_index, lb=0, ub=2, vtype=GRB.INTEGER, name="y")
+    # Integer move flows and deployments imply integer hold flows by conservation.
+    for (v, a, t), var in y.items():
+        if arcs[a].kind == "hold":
+            var.VType = GRB.CONTINUOUS
 
     # 각 년도에 새로 배치될 vehicles
     N_sc = m.addVars(
         ["OTV", "RT"], year_indices, lb=0, ub=5, vtype=GRB.INTEGER, name="N_sc"
     )
+
 
     #ISRU/storage variables
     E_SWE = ["Moon_SWE"]
@@ -323,7 +345,35 @@ def build_model(data, gurobi_params=None):
             infra_supply[supply_time] == installed_mass,
             name=f"infra_supply_matches_additions_{year}",
         )
-   
+
+    #---------------------------OTV constraints for existing demand
+    # Direct OTV arc used by payload services.
+    a_geo = next(
+        a
+        for a, arc in enumerate(arcs)
+        if arc.kind == "move"
+        and arc.tail == "GTO"
+        and arc.head == "GEO"
+        and arc.tau == 1
+    )
+
+    # Selecting a service requires an OTV departure at its supply time.
+    for idx, event in enumerate(mission["demand_events"]):
+        event_key = (event["year"], event["event_id"])
+        t = event["supply_step"]
+
+        if event["demand_step"] != t + 1:
+            raise ValueError(
+                "service-OTV 연결 제약은 공급 lead가 1스텝일 때만 적용합니다."
+            )
+
+        m.addConstr(
+            service[event_key] <= y["OTV", a_geo, t],
+            name=f"service_otv_link_{idx}",
+        )
+
+
+    
     #----------------------------xm value----------------------------
 
     arrival_expr ={}
