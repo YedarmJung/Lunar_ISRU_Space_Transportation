@@ -11,7 +11,7 @@
 
   질량 : satcat TotMass [kg]
 
-  사용법 : py -3 plot_geo_count_mass.py [--by year|month] [--exclude-cnru]
+  사용법 : py -3 plot_geo_count_mass.py [--by year|halfyear|month] [--exclude-cnru]
 """
 import argparse
 import collections
@@ -67,7 +67,7 @@ def units(exclude_cnru):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--by', choices=['year', 'month'], default='year')
+    ap.add_argument('--by', choices=['year', 'halfyear', 'month'], default='year')
     ap.add_argument('--exclude-cnru', action='store_true')
     args = ap.parse_args()
 
@@ -76,7 +76,12 @@ def main():
     cnt = collections.Counter()
     mass = collections.defaultdict(float)
     for (y, mo), kg in us:
-        key = y if args.by == 'year' else (y, mo)
+        if args.by == 'year':
+            key = y
+        elif args.by == 'halfyear':
+            key = (y, 1 if mo <= 6 else 2)
+        else:
+            key = (y, mo)
         cnt[key] += 1
         mass[key] += kg / 1000.0
 
@@ -85,6 +90,12 @@ def main():
         xs = list(range(keys[0], keys[-1] + 1))
         pos = xs
         xlabel = 'launch year'
+    elif args.by == 'halfyear':
+        (y0, h0), (y1, h1) = keys[0], keys[-1]
+        n = (y1 - y0) * 2 + (h1 - h0) + 1
+        xs = [(y0 + (h0 - 1 + i) // 2, (h0 - 1 + i) % 2 + 1) for i in range(n)]
+        pos = list(range(n))
+        xlabel = 'launch half-year'
     else:
         (y0, m0), (y1, m1) = keys[0], keys[-1]
         n = (y1 - y0) * 12 + (m1 - m0) + 1
@@ -96,7 +107,7 @@ def main():
     avg = [(mass[k] * 1000.0 / cnt[k]) if cnt.get(k) else float('nan') for k in xs]
 
     fig, ax = plt.subplots(figsize=(15, 6.0))
-    ax.bar(pos, c, width=0.8 if args.by == 'year' else 1.0,
+    ax.bar(pos, c, width=1.0 if args.by == 'month' else 0.8,
            color=BAR_COLOR, linewidth=0, zorder=2, label='payloads launched')
     ax.set_ylabel('payloads launched  [count]', fontsize=11, color='#3C5E86')
     ax.tick_params(axis='y', colors='#3C5E86')
@@ -113,6 +124,7 @@ def main():
         ax.set_xticks(range(((xs[0] // 10) + 1) * 10, xs[-1] + 1, 10))
         ax.set_xlim(xs[0] - 1, xs[-1] + 1)
     else:
+        # halfyear 의 두 번째 원소는 1/2, month 는 1..12 -> 둘 다 '1' 이 연초
         ticks = [i for i, (yy, mm) in enumerate(xs) if mm == 1 and yy % 10 == 0]
         ax.set_xticks(ticks)
         ax.set_xticklabels([str(xs[i][0]) for i in ticks])
@@ -120,10 +132,10 @@ def main():
 
     note = ['%.0f kg 이하 동반발사분 통합' % MERGE_MAX_KG]
     ax.set_xlabel(xlabel, fontsize=11)
-    ax.set_title('GEO payloads: count and mean mass per %s, %d–%d%s'
-                 % (args.by, (xs[0] if args.by == 'year' else xs[0][0]),
-                    (xs[-1] if args.by == 'year' else xs[-1][0]),
-                    '   (CN/RU/SU excluded)' if args.exclude_cnru else ''),
+    unit = {'year': 'year', 'halfyear': '6 months', 'month': 'month'}[args.by]
+    y_first = xs[0] if args.by == 'year' else xs[0][0]
+    y_last = xs[-1] if args.by == 'year' else xs[-1][0]
+    ax.set_title('GEO payloads: count and mean mass per %s, %d–%d' % (unit, y_first, y_last),
                  fontsize=14, pad=12)
     ax.grid(axis='y', alpha=0.22, zorder=1)
     ax.set_axisbelow(True)

@@ -30,6 +30,7 @@ COST_COLORS = {
     "storage": "#54A24B",
     "infrastructure_to_GTO": "#BAB0AC",
     "spacecraft": "#B279A2",
+    "vehicle_operation": "#FF9DA6",
     "maintenance": "#E45756",
     "earth_prop": "#72B7B2",
 }
@@ -78,6 +79,7 @@ def generate_plots(solution_path=None, plot_dir=None):
         plot_cost_breakdown,
         plot_cost_share,
         plot_demand_profile,
+        plot_served_unserved_payload_over_time,
         plot_infrastructure,
         plot_production,
     ]
@@ -505,17 +507,33 @@ def plot_infrastructure_flow_over_time(solution, plot_dir):
             )
 
     vehicle_style = {
-        "OTV": {"target": "GTO", "color": "mediumpurple",
+        "OTV": {"initial_target": "GTO", "color": "mediumpurple",
                 "offset": -2.05, "label_y": 0.07},
-        "RT": {"target": "Moon", "color": "tab:red",
+        "RT": {"initial_target": "Moon", "color": "tab:red",
                "offset": -0.65, "label_y": 0.25},
+    }
+    # N_sc is indexed by the year in which the vehicle becomes available, but
+    # post-initial vehicles enter the network at that year's earlier GTO
+    # resupply window.  Preserve the exact times saved in the solution instead
+    # of drawing every addition at an annual boundary.
+    resupply_times = sorted(int(raw_time) for raw_time in supply_by_time)
+    deployment_time_by_year = {
+        year: time
+        for year, time in zip(range(2, mission_years + 1), resupply_times)
     }
     for raw_year, annual in fleet_additions.items():
         year = int(raw_year)
-        deployment_time = (year - 1) * steps_per_year
         for vehicle, style in vehicle_style.items():
             count = int(round(annual.get(vehicle, 0)))
-            target = style["target"]
+            if year == 1:
+                deployment_time = 0
+                target = style["initial_target"]
+            else:
+                deployment_time = deployment_time_by_year.get(
+                    year,
+                    (year - 1) * steps_per_year - steps_per_year // 2,
+                )
+                target = "GTO"
             if count <= 0 or target not in y:
                 continue
             origin_x = deployment_time + style["offset"]
@@ -762,6 +780,7 @@ def plot_cost_share(solution, plot_dir):
         "storage": breakdown.get("storage", 0.0),
         "infrastructure_to_GTO": breakdown.get("infrastructure_to_GTO", 0.0),
         "spacecraft": breakdown.get("spacecraft", 0.0),
+        "vehicle_operation": breakdown.get("vehicle_operation", 0.0),
         "maintenance": breakdown.get("maintenance", 0.0),
         "earth_prop": breakdown.get("earth_prop", 0.0),
     }
@@ -773,19 +792,15 @@ def plot_cost_share(solution, plot_dir):
 
     colors = [COST_COLORS[label] for label in labels]
     fig, ax = plt.subplots(figsize=(11, 6.5))
-    wedges, label_texts, autotexts = ax.pie(
+    wedges, _, autotexts = ax.pie(
         values,
-        labels=labels,
         colors=colors,
         startangle=90,
         counterclock=False,
         autopct=lambda pct: f"{pct:.1f}%",
         pctdistance=0.72,
-        labeldistance=1.08,
         wedgeprops={"edgecolor": "white", "linewidth": 1.2},
     )
-    for text in label_texts:
-        text.set_fontsize(15)
     for text in autotexts:
         text.set_fontsize(16)
         text.set_weight("bold")
@@ -864,6 +879,74 @@ def plot_demand_profile(solution, plot_dir):
     fig.tight_layout()
     path = plot_dir / "demand_profile.png"
     fig.savefig(path, dpi=180)
+    plt.close(fig)
+    return path
+
+
+def plot_served_unserved_payload_over_time(solution, plot_dir):
+    """Plot served and unserved payload mass at each demand time."""
+    mission = solution.get("mission", {})
+    events = solution.get("satellite_service", mission.get("demand_events", []))
+    if not events:
+        return None
+
+    days_per_year = mission["days_per_year"]
+    days_per_step = mission["days_per_step"]
+    mission_years = mission["mission_years"]
+
+    mass_by_day = {}
+    for event in events:
+        day = int(event["demand_day"])
+        status = "served" if event.get("served", True) else "unserved"
+        bucket = mass_by_day.setdefault(day, {"served": 0.0, "unserved": 0.0})
+        bucket[status] += float(event["mass_t"])
+
+    days = sorted(mass_by_day)
+    times = [day / days_per_year for day in days]
+    served = [mass_by_day[day]["served"] for day in days]
+    unserved = [mass_by_day[day]["unserved"] for day in days]
+    served_total = sum(served)
+    unserved_total = sum(unserved)
+    total = served_total + unserved_total
+    bar_width = 0.72 * days_per_step / days_per_year
+
+    fig, ax = plt.subplots(figsize=(16, 6))
+    ax.bar(
+        times,
+        served,
+        width=bar_width,
+        color="#4C78A8",
+        label=f"served ({served_total:.1f} t, {served_total / total:.1%})",
+        zorder=3,
+    )
+    ax.bar(
+        times,
+        unserved,
+        width=bar_width,
+        bottom=served,
+        color="#E45756",
+        label=f"unserved ({unserved_total:.1f} t, {unserved_total / total:.1%})",
+        zorder=3,
+    )
+
+    year_ticks = list(range(mission_years + 1))
+    year_labels = [f"Y{year + 1}" for year in range(mission_years)] + ["End"]
+    ax.set_xticks(year_ticks)
+    ax.set_xticklabels(year_labels)
+    ax.set_xlim(0, mission_years)
+    ax.set_xlabel(
+        f"mission time (payload mass aggregated by {days_per_step}-day demand step)"
+    )
+    ax.set_ylabel("payload mass at demand time [t]")
+    ax.set_title("Served and unserved payload mass over time")
+    ax.grid(axis="y", color="0.9", lw=0.8, zorder=0)
+    for boundary in year_ticks:
+        ax.axvline(boundary, color="0.9", ls=":", lw=0.8, zorder=0)
+    ax.legend(frameon=False, ncol=2, loc="upper left")
+    fig.tight_layout()
+
+    path = plot_dir / "served_unserved_payload_over_time.png"
+    fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path
 

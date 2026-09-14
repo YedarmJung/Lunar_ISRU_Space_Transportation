@@ -275,6 +275,15 @@ def build_model(data, gurobi_params=None):
         )
     )
 
+    obj_vehicle_operation = (
+        gp.quicksum(
+            0.5*y[v,a,t]
+            for (v,a,t) in y
+            if arcs[a].kind != "hold"
+        )
+
+    )
+
     obj_spacecraft = obj_vehicle + obj_tank
 
     # Maintenance is charged on the stock that actually exists in each year.
@@ -299,8 +308,7 @@ def build_model(data, gurobi_params=None):
 
     # Rejecting a satellite is penalized by the cost of loading the additional
     # Earth-supplied propellant its payload would require for GTO -> GEO.
-
-    unserved_penalty_musd_per_t = 0.92 * (
+    unserved_penalty_musd_per_t = 0.837 * (
         bc["initial_prop_musd_per_t"] + bc["transfer_musd_per_t"]["GTO"]
     )
     obj_unserved_penalty = gp.quicksum(
@@ -316,6 +324,7 @@ def build_model(data, gurobi_params=None):
         "storage": obj_storage,
         "infrastructure_to_GTO": obj_infra_to_gto,
         "spacecraft": obj_spacecraft,
+        "vehicle_operation" : obj_vehicle_operation,
         "maintenance": obj_maint,
         "earth_prop": obj_earth_prop,
         "unserved_penalty": obj_unserved_penalty,

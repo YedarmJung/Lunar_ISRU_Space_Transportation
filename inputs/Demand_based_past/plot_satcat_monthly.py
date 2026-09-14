@@ -219,14 +219,10 @@ def plot_yearly(agg, cnt):
     ax.set_xlim(y0 - 1, y1 + 1)
     ax.set_ylim(0, max(mass) * 1.10)
     ax.set_xlabel('launch year', fontsize=11)
-    ax.set_ylabel('payload mass launched  [t / year]', fontsize=11)
+    ax.set_ylabel('payload mass  [t / year]', fontsize=11)
     ax.set_title('Payload mass launched to orbit per year, %d–%d' % (y0, y1),
                  fontsize=14, pad=12)
-    if partial:
-        ax.set_xlabel(ax.get_xlabel() + '        (%d partial: through %s)'
-                      % (last_y, ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul',
-                                  'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][last_m - 1]),
-                      fontsize=11)
+
     return fig, ax, xs, mass, nsat, (y0, y1)
 
 
@@ -270,9 +266,7 @@ def main():
         note.append('Shuttle orbiters excluded')
     if args.exclude_cnru:
         note.append('CN/RU/SU satellites excluded')
-    if note:
-        ax.set_title(ax.get_title() + '   (' + '; '.join(note) + ')',
-                     fontsize=12.5, pad=12)
+
     ax.grid(axis='y', alpha=0.25, zorder=1)
     ax.set_axisbelow(True)
     for out in (dst, dst.replace('.png', '.pdf')):

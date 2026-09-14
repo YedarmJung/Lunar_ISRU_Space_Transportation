@@ -75,6 +75,21 @@ DROP_STATUS = {'DSO', 'DSA', 'AR'}   # AR = 로켓에 부착된 채 분리 실�
 # GEO 도달 실패 후 전이궤도에 좌초
 DROP_OPORBIT = {'GTO'}
 DROP_JCAT = {
+    # ---- 1996-2015 ----
+    'S25023': 'TEAMSAT: Ariane 502 시험발사 부착 탑재물 (Status=AO)',
+    'S25024': 'Maqsat-B: Ariane 502 질량 모사체 (Status=AO)',
+    'S25025': 'YES: Ariane 502 동반 교육위성, HEO',
+    'S25068': 'Equator-S: 564x67070 km HEO 자기권 과학위성',
+    'S25175': 'Kakehashi(COMETS): H-II 2단 이상으로 472x17715 km 좌초',
+    'S25724': 'Milstar 3: Titan IV/Centaur 실패로 1094x5152 km 좌초',
+    'S25727': 'Orion 3: Delta III 2단 실패로 LEO 좌초',
+    'S27815': 'USERS REM: 재진입 캡슐, LEO',
+    'S28500': 'Demosat: Delta IV Heavy 시험 질량모사체, GEO 미도달',
+    'S32384': 'GPS IIR-18(M): MEO 항법위성',
+    'S32711': 'GPS IIR-19(M): MEO 항법위성',
+    'S38752': 'Van Allen Probe A (RBSP): HEO 과학위성',
+    'S38753': 'Van Allen Probe B (RBSP): HEO 과학위성',
+    # ---- 2016-2025 ----
     'S41896': 'Arase(ERG): 426x32258 km HEO 자기권 과학위성, GEO 아님',
     'S43229': 'PODSAT: 180x22165 km 에 머문 GTO 시험탑재체, 궤도상승 안 함',
     'S43241': 'GSAT-6A: 3차 원지점분사 후 교신두절, 25977x36370 km 좌초 (전손)',
@@ -82,6 +97,11 @@ DROP_JCAT = {
     'S62258': 'PROBA-3 OSC: HEO 편대비행 미션, GEO 아님',
     'S48619': 'TDO 3: MEO 캘리브레이션 타겟(20 kg), 재진입',
     'S48620': 'TDO 4: MEO 캘리브레이션 타겟(20 kg), 재진입',
+}
+# OpOrbit=GTO 로 남아있지만 실제로는 GEO 에서 운용중인 위성 (DROP_OPORBIT 규칙 예외)
+KEEP_JCAT = {
+    'S39237': 'Amos 4: GCAT OpOrbit=GTO(2860x35792) 미갱신, 실제 65E GEO 운용',
+    'S39206': 'MUOS 2: GCAT OpOrbit=GTO(3800x35781) 미갱신, 실제 GEO 운용',
 }
 # 참고 메모
 NOTES = {
@@ -100,6 +120,8 @@ MOTOR_PREFIX_TYPE = [
     ('R-4D', 'CHEM'), ('S400', 'CHEM'), ('S-400', 'CHEM'),    # 이원추진 원지점엔진
     ('BT-4', 'CHEM'), ('IHI BT-4', 'CHEM'), ('Leros', 'CHEM'),
     ('ISRO LAM', 'CHEM'), ('LAPS', 'CHEM'), ('DFH', 'CHEM'), ('LAE', 'CHEM'),
+    ('IHI', 'CHEM'), ('2x Leros', 'CHEM'), ('X/R-4D', 'CHEM'),
+    ('Star ', 'CHEM'), ('TE-M-', 'CHEM'),                    # 고체 원지점 킥모터
     ('AOCS', 'RCS'),                                          # 원지점엔진 없이 RCS 만
 ]
 
@@ -193,6 +215,8 @@ def is_cn_ru(sat, lv):
 
 
 def not_geo_reason(s):
+    if s['JCAT'] in KEEP_JCAT:
+        return None
     if s['JCAT'] in DROP_JCAT:
         return DROP_JCAT[s['JCAT']]
     if s['Status'] == 'AR':
@@ -231,7 +255,7 @@ def to_record(s, lr, d):
         'lv_type': lv, 'lv_country': lv_country(lv) if lv else '',
         'launch_site': lr.get('Launch_Site', ''),
         'launch_agency': lr.get('Agency', ''),
-        'note': NOTES.get(s['JCAT'], ''),
+        'note': KEEP_JCAT.get(s['JCAT'], '') or NOTES.get(s['JCAT'], ''),
     }
 
 
