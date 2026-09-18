@@ -15,7 +15,7 @@ from units import MODEL_UNITS, SOLUTION_SCHEMA_VERSION
 
 
 RESULT_DIR = Path("results")
-DEMAND_PROFILE_PATH = Path("inputs/Demand_Scenarios") / "base_10yr_lam13_k0.88_2119.json"
+DEMAND_PROFILE_PATH = Path("inputs/Demand_Scenarios") / "base_10yr_0.05_increase.json"
 # Point this at a .mst produced by make_warm_start.py to warm start the solve.
 # Leave it as None to start from scratch.
 #WARM_START_PATH = Path("results/plots_20260902_163755_9yr/start.mst")
@@ -39,7 +39,15 @@ def main():
     shutil.copy2(DEMAND_PROFILE_PATH, input_copy_path)
 
     data = get_data(DEMAND_PROFILE_PATH)
-    params = {**GUROBI_PARAMS, "LogFile": str(run_dir / "solver.log")}
+    incumbent_dir = run_dir / "incumbent"
+    incumbent_dir.mkdir(parents=True, exist_ok=True)
+    params = {
+        **GUROBI_PARAMS,
+        "LogFile": str(run_dir / "solver.log"),
+        # Dump every improved incumbent, so a run killed before it finishes
+        # still leaves its best solution behind.
+        "SolFiles": str(incumbent_dir / "sol"),
+    }
     model, variables = build_model(data, gurobi_params=params)
     _load_warm_start(model, run_dir)
     incumbent_plotter = IncumbentFlowPlotter(data, variables, run_dir)
