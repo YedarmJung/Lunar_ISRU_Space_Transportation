@@ -7,4 +7,11 @@ __pycache__/
 /results/
 /tmp/
 /발표자료/
-/inputs/
+/code.zip
+
+# Inputs: keep only the demand JSON files the solver reads
+/inputs/*
+!/inputs/*.json
+!/inputs/Demand_Scenarios/
+/inputs/Demand_Scenarios/*
+!/inputs/Demand_Scenarios/*.json
