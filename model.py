@@ -482,7 +482,12 @@ def build_model(data, gurobi_params=None):
                 if k == "Infra" and i == "GTO" and t in infra_supply:
                     rhs += infra_supply[t]
 
-                m.addConstr(outflow - inflow <= rhs, name=f"mass[{k},{i},{t}]")
+                if t == T-1 and k in ("H2O_Tank", "Prop_Tank"):
+                    m.addConstr(outflow - inflow <= rhs, name=f"mass[{k},{i},{t}]")
+
+                else:
+                    m.addConstr(outflow - inflow == rhs, name=f"mass[{k},{i},{t}]")
+
 
     #----------------------------concurrency----------------------------
     H2O_TANK_RATIO = 40.0      # t H2O per t H2O tank (dimensionless ratio)

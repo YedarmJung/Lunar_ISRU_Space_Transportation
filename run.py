@@ -15,7 +15,7 @@ from units import MODEL_UNITS, SOLUTION_SCHEMA_VERSION
 
 
 RESULT_DIR = Path("results")
-DEMAND_PROFILE_PATH = Path("inputs/Demand_Scenarios") / "base_10yr_0.05_increase.json"
+DEMAND_PROFILE_PATH = Path("inputs/Demand_Scenarios") / "base_10yr_0.08_increase.json"
 # Point this at a .mst produced by make_warm_start.py to warm start the solve.
 # Leave it as None to start from scratch.
 #WARM_START_PATH = Path("results/plots_20260902_163755_9yr/start.mst")
